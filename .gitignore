@@ -1,0 +1,23 @@
+# Deno
+.deno/
+coverage/
+cov_profile/
+*.lcov
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Node (in case anyone accidentally pulls in npm tooling locally)
+node_modules/
+
+# Build / dist
+dist/
+build/
