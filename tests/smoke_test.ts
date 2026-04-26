@@ -1,25 +1,28 @@
 /**
- * Smoke test: verifies the test harness can load a YAML fixture and that the
- * standard library YAML parser produces the expected top-level shape.
- *
- * This is intentionally trivial. It exists so CI fails loudly the moment the
- * harness, import map, or task wiring breaks — *before* feature tests start
- * being added.
+ * Smoke test: verifies the test runner is wired and that a fixture parses as
+ * YAML with the expected top-level shape. Intentionally trivial — it exists so
+ * CI fails loudly the moment the harness, import map, or task wiring breaks
+ * before feature tests start being added.
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { loadYamlFixture } from "./support/runner.ts";
+import { parse as parseYaml } from "@std/yaml";
+import { fromFileUrl } from "@std/path";
 
-Deno.test("smoke: harness loads minimal.yaml fixture", async () => {
-  const doc = await loadYamlFixture("minimal.yaml");
-  assert(doc !== null && typeof doc === "object", "fixture should parse to an object");
-  const openapi = (doc as Record<string, unknown>).openapi;
-  assertEquals(typeof openapi, "string", "top-level `openapi` field must be a string");
+const FIXTURES = fromFileUrl(new URL("./fixtures/", import.meta.url));
+
+async function loadFixture(name: string): Promise<unknown> {
+  return parseYaml(await Deno.readTextFile(`${FIXTURES}${name}`));
+}
+
+Deno.test("smoke: minimal.yaml parses with a string `openapi` field", async () => {
+  const doc = await loadFixture("minimal.yaml");
+  assert(doc !== null && typeof doc === "object");
+  assertEquals(typeof (doc as Record<string, unknown>).openapi, "string");
 });
 
-Deno.test("smoke: harness loads petstore-tiny.yaml fixture", async () => {
-  const doc = await loadYamlFixture("petstore-tiny.yaml");
+Deno.test("smoke: petstore-tiny.yaml parses with a string `openapi` field", async () => {
+  const doc = await loadFixture("petstore-tiny.yaml");
   assert(doc !== null && typeof doc === "object");
-  const openapi = (doc as Record<string, unknown>).openapi;
-  assertEquals(typeof openapi, "string");
+  assertEquals(typeof (doc as Record<string, unknown>).openapi, "string");
 });
