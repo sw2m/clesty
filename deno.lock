@@ -30,7 +30,6 @@
     "dependencies": [
       "jsr:@std/assert@^1.0.10",
       "jsr:@std/path@^1.0.8",
-      "jsr:@std/testing@^1.0.8",
       "jsr:@std/yaml@^1.0.5"
     ]
   }
