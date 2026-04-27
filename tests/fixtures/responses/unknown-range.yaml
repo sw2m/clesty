@@ -1,0 +1,15 @@
+openapi: 3.1.0
+info:
+  title: Unknown Range Key (refusal)
+  version: 0.0.1
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      responses:
+        "abc":
+          description: garbage key — must be rejected at compile time
+          content:
+            application/json:
+              schema:
+                type: object

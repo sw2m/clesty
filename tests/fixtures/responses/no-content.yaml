@@ -1,0 +1,11 @@
+openapi: 3.1.0
+info:
+  title: No Content Map
+  version: 0.0.1
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      responses:
+        "200":
+          description: declared but no content map

@@ -1,0 +1,15 @@
+openapi: 3.1.0
+info:
+  title: Lowercase Range (refusal)
+  version: 0.0.1
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      responses:
+        "2xx":
+          description: lowercase range — must be rejected at compile time
+          content:
+            application/json:
+              schema:
+                type: object

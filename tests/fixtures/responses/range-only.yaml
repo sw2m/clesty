@@ -1,0 +1,21 @@
+openapi: 3.1.0
+info:
+  title: Range Only
+  version: 0.0.1
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      responses:
+        "2XX":
+          description: any 2xx
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          description: fallback
+          content:
+            application/json:
+              schema:
+                type: object

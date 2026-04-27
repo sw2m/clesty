@@ -1,0 +1,16 @@
+openapi: 3.1.0
+info:
+  title: Binary Response
+  version: 0.0.1
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      responses:
+        "200":
+          description: PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
