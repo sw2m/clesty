@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Schema $ref — parent escape (refusal case)
+  version: 0.0.1
+paths:
+  /pwn:
+    get:
+      operationId: getPwn
+      responses:
+        "200":
+          description: Path-traversal via parent segments — clesty pre-flight rejects
+          content:
+            application/json:
+              schema:
+                $ref: "../../etc/passwd"
+components: {}

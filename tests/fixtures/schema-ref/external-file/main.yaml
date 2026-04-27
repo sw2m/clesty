@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Schema $ref — external file
+  version: 0.0.1
+paths:
+  /pets:
+    get:
+      operationId: getPet
+      responses:
+        "200":
+          description: A pet
+          content:
+            application/json:
+              schema:
+                $ref: "./components.yaml#/components/schemas/Pet"
+components: {}

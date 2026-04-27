@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Schema $ref — non-string (refusal case)
+  version: 0.0.1
+paths:
+  /broken:
+    get:
+      operationId: getBroken
+      responses:
+        "200":
+          description: $ref must be a string per spec; this MUST be rejected
+          content:
+            application/json:
+              schema:
+                $ref: 42
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string

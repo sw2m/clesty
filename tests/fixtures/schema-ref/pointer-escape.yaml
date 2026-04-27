@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info:
+  title: Schema $ref — JSON Pointer escapes
+  version: 0.0.1
+paths:
+  /weird:
+    get:
+      operationId: getWeird
+      responses:
+        "200":
+          description: A schema reached via ~0 (~) and ~1 (/) escapes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/foo~1bar"
+components:
+  schemas:
+    "foo/bar":
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+    "tilde~name":
+      type: object
+      required: [v]
+      properties:
+        v:
+          type: string

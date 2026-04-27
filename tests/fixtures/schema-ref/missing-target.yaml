@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Schema $ref — missing target (refusal case)
+  version: 0.0.1
+paths:
+  /missing:
+    get:
+      operationId: getMissing
+      responses:
+        "200":
+          description: Pointer names a schema that does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoesNotExist"
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
