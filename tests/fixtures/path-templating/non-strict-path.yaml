@@ -1,0 +1,23 @@
+openapi: 3.1.0
+info:
+  title: Path templating — non-strict path param (warning case)
+  version: 0.0.1
+paths:
+  /users/{id}:
+    get:
+      operationId: getUser
+      parameters:
+        - name: id
+          in: path
+          # NOTE: OpenAPI requires `required: true` on every path parameter.
+          # This fixture deliberately omits it. clesty must compile with a
+          # `Compile.NonStrictPath` warning, NOT an error.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A user
+          content:
+            application/json:
+              schema:
+                type: object

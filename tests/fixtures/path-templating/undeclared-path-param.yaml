@@ -1,0 +1,18 @@
+openapi: 3.1.0
+info:
+  title: Path templating — undeclared path param (refusal case)
+  version: 0.0.1
+paths:
+  /users/{id}:
+    get:
+      operationId: getUser
+      # NOTE: `{id}` appears in the path template but is NOT declared in
+      # `parameters`. hey-api's typed client cannot accept this — clesty
+      # must refuse with `Compile.UndeclaredPathParam`.
+      responses:
+        "200":
+          description: A user
+          content:
+            application/json:
+              schema:
+                type: object

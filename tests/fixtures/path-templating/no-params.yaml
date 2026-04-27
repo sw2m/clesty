@@ -1,0 +1,15 @@
+openapi: 3.1.0
+info:
+  title: Path templating — no path params
+  version: 0.0.1
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        "200":
+          description: Health probe
+          content:
+            application/json:
+              schema:
+                type: object
