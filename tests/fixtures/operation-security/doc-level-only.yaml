@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: doc-level only
+  version: 0.0.1
+security:
+  - apiKey: []
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object

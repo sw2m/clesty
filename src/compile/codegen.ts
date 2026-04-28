@@ -138,8 +138,9 @@ function sourceFor(
   groups: ParamGroup[],
   deprecated: boolean,
   baseUrl: string | null,
+  authLines: string[] = [],
 ): string {
-  const flagLines: string[] = [];
+  const flagLines: string[] = [...authLines];
   const blocks: string[] = [];
   for (const g of groups) {
     for (const p of g.required) {
@@ -182,6 +183,39 @@ function firstServerUrl(servers: unknown): string | null {
   if (!Array.isArray(servers) || servers.length === 0) return null;
   const first = servers[0] as { url?: unknown };
   return typeof first?.url === "string" ? first.url : null;
+}
+
+type SecurityScheme = { type?: string; scheme?: string; in?: string; name?: string };
+
+/** Map a securityScheme to its corresponding CLI flag, or null if the
+ * scheme type is out of scope for this PR (oauth2, mutualTLS, etc.). */
+function flagForScheme(s: SecurityScheme | undefined): string | null {
+  if (!s) return null;
+  if (s.type === "apiKey") return "--api-key";
+  if (s.type === "http" && s.scheme === "bearer") return "--bearer-token";
+  return null;
+}
+
+/** Walk an effective security array and emit one option line per
+ * mapped scheme. Returns an empty array if the security array is empty
+ * or no schemes resolve to known flags. */
+function authFlagLines(
+  effective: unknown,
+  schemes: Record<string, SecurityScheme>,
+): string[] {
+  if (!Array.isArray(effective)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const requirement of effective) {
+    if (!requirement || typeof requirement !== "object") continue;
+    for (const schemeName of Object.keys(requirement as Record<string, unknown>)) {
+      const flag = flagForScheme(schemes[schemeName]);
+      if (flag === null || seen.has(flag)) continue;
+      seen.add(flag);
+      out.push(`  .requiredOption("${flag} <value>", "auth: ${schemeName}")`);
+    }
+  }
+  return out;
 }
 
 /** Walk every operation looking for a `callbacks` map. Returns
@@ -239,6 +273,9 @@ function emitFromDoc(doc: Record<string, unknown>): EmitResult {
   const sources: string[] = [];
 
   const docServerUrl = firstServerUrl(doc.servers);
+  const docSecurity = doc.security;
+  const components = (doc.components ?? {}) as Record<string, unknown>;
+  const schemes = (components.securitySchemes ?? {}) as Record<string, SecurityScheme>;
   const paths = (doc.paths ?? {}) as Record<string, unknown>;
   for (const path of Object.keys(paths)) {
     const item = paths[path] as Record<string, unknown>;
@@ -306,7 +343,15 @@ function emitFromDoc(doc: Record<string, unknown>): EmitResult {
       // First entry's url wins; URL-variable substitution is out of scope.
       const opServerUrl = firstServerUrl(op.servers);
       const baseUrl = opServerUrl ?? pathServerUrl ?? docServerUrl;
-      sources.push(sourceFor(opId, groups, op.deprecated === true, baseUrl));
+
+      // Effective security: op-level if present (including the empty-array
+      // case which removes auth), otherwise inherit doc-level.
+      const effectiveSecurity = "security" in op ? op.security : docSecurity;
+      const authLines = authFlagLines(effectiveSecurity, schemes);
+
+      sources.push(
+        sourceFor(opId, groups, op.deprecated === true, baseUrl, authLines),
+      );
     }
   }
 
