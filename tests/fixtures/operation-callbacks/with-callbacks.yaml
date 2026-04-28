@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: with callbacks
+  version: 0.0.1
+paths:
+  /subscribe:
+    post:
+      operationId: subscribe
+      callbacks:
+        onEvent:
+          "{$request.body#/callbackUrl}":
+            post:
+              operationId: onEvent
+              responses:
+                "200":
+                  description: ok
+                  content:
+                    application/json:
+                      schema:
+                        type: object
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object

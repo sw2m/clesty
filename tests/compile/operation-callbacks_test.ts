@@ -1,97 +1,72 @@
 /**
- * Red-Gate scaffold for sw2m/clesty issue #152 — Operation `callbacks`.
+ * Phase 2a Red-Gate suite for sw2m/clesty issue #152 — Operation `callbacks`.
  *
- * staging: tests are stubbed (`Deno.test.ignore`) until #152 grows a tech
- *          spec and the implementation lands. Activation flow:
- *            1. Flesh out the test bodies against the final tech spec.
- *            2. Replace each `Deno.test.ignore` with `Deno.test`.
- *            3. Remove every `// wip` and `// staging` line.
- *            4. Land impl as a non-test commit descending from the
- *               Red-gate-cleared marker (philosophies §VIII).
- *
- * Goal (from #3 / #27):
- *   - Out-of-band callbacks. CLI: `cli describe-callbacks` only — clesty
- *     does NOT issue live callback requests.
- *   - Test: callback expressions render in the describe output.
- *
- * @module
+ * Out-of-band callbacks are documentation-only for clesty: the generated
+ * binary exposes a `describe-callbacks` subcommand that lists, per
+ * operation, the named callbacks and their URL templates. Runtime
+ * expressions like `{$request.body#/callbackUrl}` appear verbatim — clesty
+ * never resolves them since no live callback request is issued.
  */
 
-import { assert } from "@std/assert";
+import { assert, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
-// wip: import the code-under-test once src/compile/codegen.ts grows the
-// callbacks describe-rendering wiring.
+const mod = await import("../../src/compile/codegen.ts");
 // deno-lint-ignore no-explicit-any
-let Codegen: any;
-try {
-  Codegen = await import("../../src/compile/codegen.ts");
-} catch {
-  Codegen = null;
-}
+const Codegen: any = (mod as Record<string, unknown>).Codegen ?? mod;
 
 const FIXTURE_DIR = fromFileUrl(
   new URL("../fixtures/operation-callbacks/", import.meta.url),
 );
 
-// staging: keep bindings lint-clean while assertions are still WIP.
-void Codegen;
-void FIXTURE_DIR;
+async function emitSource(fixture: string): Promise<string> {
+  const result = await Codegen.emit(`${FIXTURE_DIR}${fixture}`);
+  return typeof result === "string" ? result : (result.source ?? "");
+}
 
-// ---------------------------------------------------------------------------
-// Item A — `describe-callbacks` subcommand exists and lists callback names.
-// ---------------------------------------------------------------------------
+Deno.test("compile (#152): doc with callbacks emits a `describe-callbacks` subcommand", async () => {
+  const src = await emitSource("with-callbacks.yaml");
+  const match = src.match(/\.command\(\s*["']describe-callbacks["']/);
+  assert(
+    match !== null,
+    `expected a 'describe-callbacks' subcommand; src:\n${src}`,
+  );
+});
 
-Deno.test.ignore(
-  "#152 (wip): generated CLI exposes a `describe-callbacks` subcommand",
-  () => {
-    // staging: compile a fixture with one operation declaring two named
-    // callbacks. Run --help on the generated binary. Assert
-    // `describe-callbacks` appears among the subcommands. Exact subcommand
-    // shape per the to-be-written tech spec.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#152): describe output renders runtime expressions verbatim", async () => {
+  const src = await emitSource("with-callbacks.yaml");
+  // The expression in the fixture is `{$request.body#/callbackUrl}` — it
+  // should appear verbatim in the emitted source so the runtime can
+  // print it as-is.
+  assertStringIncludes(src, "{$request.body#/callbackUrl}");
+});
 
-// ---------------------------------------------------------------------------
-// Item B — Describe output renders runtime callback expressions verbatim.
-// ---------------------------------------------------------------------------
+Deno.test("compile (#152): describe-callbacks issues no HTTP / fetch call", async () => {
+  const src = await emitSource("with-callbacks.yaml");
+  // Find the action block for describe-callbacks. It must NOT contain
+  // `client.<op>(`, `fetch(`, or `await client.` — describe is a pure
+  // print operation, no live request.
+  const block = src.match(
+    /\.command\(\s*["']describe-callbacks["'][\s\S]*?\.action\(([\s\S]*?)\)\s*;/,
+  );
+  assert(block !== null, `could not locate describe-callbacks action; src:\n${src}`);
+  assert(
+    !/\bfetch\s*\(/.test(block[1]) && !/await\s+client\./.test(block[1]),
+    `describe-callbacks action must not call fetch/client; got:\n${block[1]}`,
+  );
+});
 
-Deno.test.ignore(
-  "#152 (wip): describe-callbacks renders the {$request.body#/...} expressions",
-  () => {
-    // staging: callback URL templates contain runtime expressions like
-    // `{$request.body#/callbackUrl}`. Assert these expressions appear in
-    // the describe output verbatim — clesty does NOT resolve them, since
-    // there is no live callback issued.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#152): doc with no callbacks emits no describe-callbacks subcommand", async () => {
+  const src = await emitSource("no-callbacks.yaml");
+  assert(
+    !/\.command\(\s*["']describe-callbacks["']/.test(src),
+    `expected NO describe-callbacks subcommand for callback-free doc; src:\n${src}`,
+  );
+});
 
-// ---------------------------------------------------------------------------
-// Item C — No live request is issued by `describe-callbacks`.
-// ---------------------------------------------------------------------------
-
-Deno.test.ignore(
-  "#152 (wip): describe-callbacks issues no network request",
-  () => {
-    // staging: invoke `describe-callbacks` against a fixture and assert
-    // the test process makes no outbound HTTP request (probe via a
-    // stubbed fetch / network sentinel — exact harness per the to-be-
-    // written tech spec).
-    assert(true, "wip");
-  },
-);
-
-// ---------------------------------------------------------------------------
-// Item D — Multiple callbacks per operation each render.
-// ---------------------------------------------------------------------------
-
-Deno.test.ignore(
-  "#152 (wip): each named callback in an operation renders its own block",
-  () => {
-    // staging: fixture with `callbacks: { onUpdate: ..., onDelete: ... }`.
-    // Assert both names and their URL templates appear in describe output.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#152): each named callback's expression appears in describe output", async () => {
+  const src = await emitSource("multi-callbacks.yaml");
+  // Both onUpdate and onDelete should appear with their expressions.
+  assertStringIncludes(src, "{$request.body#/onUpdateUrl}");
+  assertStringIncludes(src, "{$request.body#/onDeleteUrl}");
+});
