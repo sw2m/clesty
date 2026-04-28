@@ -1,65 +1,63 @@
 /**
- * Red-Gate scaffold for sw2m/clesty issue #162 — Parameter `required`.
+ * Phase 2a Red-Gate suite for sw2m/clesty issue #162 — Parameter `required`.
  *
- * staging: tests are stubbed (`Deno.test.ignore`) until #162 grows a tech
- *          spec and the implementation lands. Activation flow:
- *            1. Flesh out the test bodies against the final tech spec.
- *            2. Replace each `Deno.test.ignore` with `Deno.test`.
- *            3. Remove every `// wip` and `// staging` line.
- *            4. Land impl as a non-test commit descending from the
- *               Red-gate-cleared marker (philosophies §VIII).
+ * Cross-cutting test of the `required: true` semantics across every parameter
+ * location (query / header / cookie). The path location skips the test
+ * here because the OpenAPI spec mandates `required: true` for in:path —
+ * #130's path-templating tests already cover that case.
  *
- * @module
+ * Codegen plumbing landed in #469; this PR only exercises the surface.
  */
 
 import { assert } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
-// wip: import the code-under-test once the relevant src/compile module
-// grows the wiring for Parameter `required`.
+const mod = await import("../../src/compile/codegen.ts");
 // deno-lint-ignore no-explicit-any
-let Codegen: any;
-try {
-  Codegen = await import("../../src/compile/codegen.ts");
-} catch {
-  Codegen = null;
-}
+const Codegen: any = (mod as Record<string, unknown>).Codegen ?? mod;
 
 const FIXTURE_DIR = fromFileUrl(
   new URL("../fixtures/parameter-required/", import.meta.url),
 );
 
-// staging: keep bindings lint-clean while assertions are still WIP.
-void Codegen;
-void FIXTURE_DIR;
+async function emitSource(fixture: string): Promise<string> {
+  const result = await Codegen.emit(`${FIXTURE_DIR}${fixture}`);
+  return typeof result === "string" ? result : (result.source ?? "");
+}
 
-// ---------------------------------------------------------------------------
-// Item A — primary contract.
-// ---------------------------------------------------------------------------
+function flagsMatching(src: string, re: RegExp): Set<string> {
+  const out = new Set<string>();
+  for (const m of src.matchAll(re)) out.add(m[1]);
+  return out;
+}
 
-Deno.test.ignore(
-  "#162 (wip): Parameter `required` — primary contract",
-  () => {
-    // staging: replace this stub once the tech spec on #162 pins down the
-    // exact contract. The shape mirrors the sibling Red-Gate suites
-    // (e.g. tests/compile/responses_test.ts) — graceful import of the
-    // code-under-test, fixture fed in, structural assertion on the
-    // emitted source / behaviour.
-    assert(true, "wip");
-  },
-);
+const REQUIRED_RE = /requiredOption\(\s*["']--([a-zA-Z0-9_-]+)/g;
+const OPTIONAL_RE = /(?<!required)\.option\(\s*["']--([a-zA-Z0-9_-]+)/g;
 
-// ---------------------------------------------------------------------------
-// Item B — refusal / edge case (if applicable per the to-be-written spec).
-// ---------------------------------------------------------------------------
+Deno.test("compile (#162): required: true emits requiredOption across query/header/cookie", async () => {
+  const src = await emitSource("required-mixed.yaml");
+  const required = flagsMatching(src, REQUIRED_RE);
+  assert(required.has("status"), `expected '--status' (query) required; src:\n${src}`);
+  assert(required.has("X-Tenant"), `expected '--X-Tenant' (header) required; src:\n${src}`);
+  assert(required.has("session"), `expected '--session' (cookie) required; src:\n${src}`);
+});
 
-Deno.test.ignore(
-  "#162 (wip): Parameter `required` — refusal / edge case",
-  () => {
-    // staging: replace this stub once the tech spec on #162 pins the
-    // refusal / edge-case shape. If the spec turns out to be acceptance-
-    // only (no refusal cases), drop this test and update the activation
-    // checklist in the PR body.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#162): required: false emits plain option across query/header/cookie", async () => {
+  const src = await emitSource("optional-mixed.yaml");
+  const required = flagsMatching(src, REQUIRED_RE);
+  const optional = flagsMatching(src, OPTIONAL_RE);
+  for (const name of ["limit", "X-Trace-Id", "preferences"]) {
+    assert(!required.has(name), `'--${name}' must NOT be requiredOption; src:\n${src}`);
+    assert(optional.has(name), `'--${name}' must be optional option; src:\n${src}`);
+  }
+});
+
+Deno.test("compile (#162): absent `required` field defaults to optional", async () => {
+  const src = await emitSource("absent-required.yaml");
+  // OpenAPI spec: `required` defaults to false except for in:path.
+  const required = flagsMatching(src, REQUIRED_RE);
+  assert(
+    !required.has("limit"),
+    `expected absent 'required' to behave as optional; src:\n${src}`,
+  );
+});
