@@ -95,34 +95,60 @@ function pathVars(template: string): string[] {
 
 type ParamDecl = { name: string; in: string; required?: boolean };
 
-function pathParams(parameters: unknown): ParamDecl[] {
+function paramsByLocation(
+  parameters: unknown,
+  loc: "path" | "query" | "header" | "cookie",
+): ParamDecl[] {
   if (!Array.isArray(parameters)) return [];
-  return (parameters as ParamDecl[]).filter((p) =>
-    p && p.in === "path" && typeof p.name === "string"
-  );
+  return (parameters as ParamDecl[]).filter((p) => p && p.in === loc && typeof p.name === "string");
 }
 
 function kebab(opId: string): string {
   return opId.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 }
 
+type ParamGroup = {
+  /** hey-api block name: `path` | `query` | `headers` | `cookies` */
+  block: string;
+  required: ParamDecl[];
+  optional: ParamDecl[];
+};
+
 /**
  * Emit a commander-style subcommand for one operation. The string is
  * deliberately literal so the test's regex probes match without any
  * source-map / template-literal parsing.
+ *
+ * `groups` carries one entry per OpenAPI parameter location (path,
+ * query, header, cookie). Required params produce `requiredOption`
+ * lines; optional params produce `option` lines. Each group threads
+ * its values into the corresponding hey-api block (`path`, `query`,
+ * `headers`, `cookies`).
  */
-function sourceFor(opId: string, vars: string[]): string {
-  const flagLines = vars
-    .map((v) => `  .requiredOption("--${v} <${v}>", "required path parameter ${v}")`)
-    .join("\n");
-  const pathBlock = vars.length === 0
-    ? ""
-    : `path: { ${vars.map((v) => `${v}: opts.${v}`).join(", ")} }`;
-  const callBody = pathBlock === "" ? "{}" : `{ ${pathBlock} }`;
+function sourceFor(opId: string, groups: ParamGroup[]): string {
+  const flagLines: string[] = [];
+  const blocks: string[] = [];
+  for (const g of groups) {
+    for (const p of g.required) {
+      flagLines.push(
+        `  .requiredOption("--${p.name} <${p.name}>", "required ${g.block} parameter ${p.name}")`,
+      );
+    }
+    for (const p of g.optional) {
+      flagLines.push(
+        `  .option("--${p.name} <${p.name}>", "optional ${g.block} parameter ${p.name}")`,
+      );
+    }
+    const all = [...g.required, ...g.optional];
+    if (all.length > 0) {
+      blocks.push(`${g.block}: { ${all.map((p) => `${p.name}: opts.${p.name}`).join(", ")} }`);
+    }
+  }
+  const callBody = blocks.length === 0 ? "{}" : `{ ${blocks.join(", ")} }`;
   return [
     `program`,
     `  .command("${kebab(opId)}")`,
-    flagLines,
+    flagLines.join("\n"),
     `  .action(async (opts) => {`,
     `    const result = await client.${opId}(${callBody});`,
     `    console.log(JSON.stringify(result, null, 2));`,
@@ -139,7 +165,7 @@ function emitFromDoc(doc: Record<string, unknown>): EmitResult {
   const paths = (doc.paths ?? {}) as Record<string, unknown>;
   for (const path of Object.keys(paths)) {
     const item = paths[path] as Record<string, unknown>;
-    const itemLevelParams = pathParams(item.parameters);
+    const itemLevelParams = (Array.isArray(item.parameters) ? item.parameters : []) as unknown[];
     for (const method of METHODS) {
       const op = item[method] as Record<string, unknown> | undefined;
       if (!op) continue;
@@ -150,11 +176,17 @@ function emitFromDoc(doc: Record<string, unknown>): EmitResult {
       const responses = (op.responses ?? {}) as Record<string, unknown>;
       operations[opId] = { responseTable: tableOf(responses) };
 
-      // Path-templating (#130).
-      const declared = [...itemLevelParams, ...pathParams(op.parameters)];
+      // Merge path-item-level + operation-level parameters.
+      const merged = [
+        ...itemLevelParams,
+        ...((Array.isArray(op.parameters) ? op.parameters : []) as unknown[]),
+      ];
+
+      // Path-templating (#130). Every `{var}` in the URL must be declared.
+      const pathDecls = paramsByLocation(merged, "path");
       const vars = pathVars(path);
       for (const v of vars) {
-        const decl = declared.find((d) => d.name === v);
+        const decl = pathDecls.find((d) => d.name === v);
         if (!decl) {
           throw new Compile.UndeclaredPathParam(v, opId, path);
         }
@@ -168,7 +200,31 @@ function emitFromDoc(doc: Record<string, unknown>): EmitResult {
           });
         }
       }
-      sources.push(sourceFor(opId, vars));
+
+      // Build groups for codegen. Path entries follow URL-template order;
+      // query / header / cookie follow their parameters[] declaration order.
+      const pathGroup: ParamGroup = {
+        block: "path",
+        required: vars
+          .map((v) => pathDecls.find((d) => d.name === v))
+          .filter((d): d is ParamDecl => !!d),
+        optional: [],
+      };
+      const split = (loc: "query" | "header" | "cookie", block: string): ParamGroup => {
+        const decls = paramsByLocation(merged, loc);
+        return {
+          block,
+          required: decls.filter((d) => d.required === true),
+          optional: decls.filter((d) => d.required !== true),
+        };
+      };
+      const groups = [
+        pathGroup,
+        split("query", "query"),
+        split("header", "headers"),
+        split("cookie", "cookies"),
+      ];
+      sources.push(sourceFor(opId, groups));
     }
   }
 

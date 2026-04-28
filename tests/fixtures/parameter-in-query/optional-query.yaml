@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: optional query
+  version: 0.0.1
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
