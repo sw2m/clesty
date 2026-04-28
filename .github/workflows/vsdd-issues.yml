@@ -1,0 +1,19 @@
+name: VSDD Issue Review (Phase 1c)
+
+# Thin caller — delegates to sw2m/philosophies. Adversarial spec review
+# (Gemini + Claude) on issue open/edit/assigned. Advisory only — never
+# gates. Org-membership and ownership-by-assignment are enforced inside
+# the called workflow.
+
+on:
+  issues:
+    types: [opened, edited, assigned]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  vsdd:
+    uses: sw2m/philosophies/.github/workflows/issue-review.yml@main
+    secrets: inherit

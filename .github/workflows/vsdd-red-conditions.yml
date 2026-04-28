@@ -1,0 +1,21 @@
+name: VSDD Red-conditions Gate
+
+# Thin caller — delegates to sw2m/philosophies. §VIII Red Gate
+# enforcement for non-promote-pipeline PRs (#54). Three chained clauses
+# (test-commits-only, test-runner-red, coverage-adequate); on all-pass,
+# posts the `github-actions[bot]` marker comment that the
+# non-test-blocker CI uses as the cleared-from anchor.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  vsdd:
+    uses: sw2m/philosophies/.github/workflows/red-conditions-gate.yml@main
+    secrets: inherit

@@ -1,0 +1,19 @@
+name: VSDD Non-test-blocker (ancestry enforcement)
+
+# Thin caller — delegates to sw2m/philosophies. Walks every commit on
+# the PR; non-test commits must be descendants of the most recent
+# `github-actions[bot]` Red-gate-cleared marker. Pairs with
+# vsdd-red-conditions.yml.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  vsdd:
+    uses: sw2m/philosophies/.github/workflows/non-test-blocker.yml@main
+    secrets: inherit

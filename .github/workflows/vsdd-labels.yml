@@ -1,0 +1,73 @@
+name: Sync VSDD labels
+
+# Idempotent label sync. Reads `.github/labels.yml` (a list of
+# {name, color, description}) and ensures each label exists with the
+# specified color/description. Safe to re-run.
+#
+# Pre-checks for >100-char descriptions before any API call (the
+# GitHub label-description limit) so a too-long entry fails fast with
+# a per-label list, rather than silently losing labels on HTTP 422.
+#
+# This workflow is local to clesty (not delegated) because GitHub
+# labels live per-repo. The .github/labels.yml content mirrors
+# sw2m/philosophies so the names stay consistent across the org.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/labels.yml"
+      - ".github/workflows/vsdd-labels.yml"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Sync labels via gh CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f .github/labels.yml ]; then
+            echo "::error::.github/labels.yml not found"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import subprocess, sys, yaml
+          with open('.github/labels.yml') as f:
+              labels = yaml.safe_load(f)
+          if not isinstance(labels, list):
+              print('::error::.github/labels.yml must be a list of {name,color,description}', file=sys.stderr)
+              sys.exit(1)
+          oversize = [(e['name'], len(e.get('description', ''))) for e in labels
+                      if len(e.get('description', '')) > 100]
+          if oversize:
+              print('::error::Label description(s) exceed the GitHub 100-char limit:', file=sys.stderr)
+              for name, n in oversize:
+                  print(f'  {name}: {n} chars (max 100)', file=sys.stderr)
+              sys.exit(1)
+          failed = []
+          for entry in labels:
+              name = entry['name']
+              color = entry.get('color', 'cccccc').lstrip('#')
+              desc = entry.get('description', '')
+              cmd = ['gh', 'label', 'create', name, '--color', color, '--description', desc, '--force']
+              r = subprocess.run(cmd, capture_output=True, text=True)
+              status = 'ok' if r.returncode == 0 else f'FAIL ({r.returncode})'
+              print(f'  [{status}] {name}')
+              if r.returncode != 0:
+                  print(f'    stdout: {r.stdout}')
+                  print(f'    stderr: {r.stderr}')
+                  failed.append(name)
+          if failed:
+              print(f'::error::Label sync failed for: {", ".join(failed)}', file=sys.stderr)
+              sys.exit(1)
+          PY
