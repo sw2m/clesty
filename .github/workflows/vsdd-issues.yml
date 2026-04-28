@@ -1,9 +1,13 @@
 name: VSDD Issue Review (Phase 1c)
 
 # Thin caller — delegates to sw2m/philosophies. Adversarial spec review
-# (Gemini + Claude) on issue open/edit/assigned. Advisory only — never
-# gates. Org-membership and ownership-by-assignment are enforced inside
-# the called workflow.
+# (Gemini + Claude) on issue open/edit/assigned. Each reviewer's verdict
+# is embedded as HTML-comment frontmatter at the top of its review
+# comment; promote.yml's `phase-1c-clearance` job parses those verdicts
+# and BLOCKS goal→tech / tech→PR promotion when either reviewer's
+# latest verdict is `fail` or stale (older than the issue's last edit).
+# Org-membership and ownership-by-assignment are enforced inside the
+# called workflow.
 
 on:
   issues:
