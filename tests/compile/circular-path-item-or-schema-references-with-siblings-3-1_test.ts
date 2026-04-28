@@ -26,7 +26,10 @@ try {
 }
 
 const FIXTURE_DIR = fromFileUrl(
-  new URL("../fixtures/circular-path-item-or-schema-references-with-siblings-3-1/", import.meta.url),
+  new URL(
+    "../fixtures/circular-path-item-or-schema-references-with-siblings-3-1/",
+    import.meta.url,
+  ),
 );
 
 // staging: keep bindings lint-clean while assertions are still WIP.
