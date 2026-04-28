@@ -26,7 +26,10 @@ try {
 }
 
 const FIXTURE_DIR = fromFileUrl(
-  new URL("../fixtures/schemas-using-schema-overriding-doc-jsonschemadialect-3-1/", import.meta.url),
+  new URL(
+    "../fixtures/schemas-using-schema-overriding-doc-jsonschemadialect-3-1/",
+    import.meta.url,
+  ),
 );
 
 // staging: keep bindings lint-clean while assertions are still WIP.
