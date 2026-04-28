@@ -180,40 +180,25 @@ for (const input of ["---", "___", "!!!"]) {
 //   - the error mentions both source operationIds and the kebab name
 // ---------------------------------------------------------------------------
 
-Deno.test("#148 mapping collision: 'getPet' and 'get-pet' collide on 'get-pet'", () => {
+Deno.test("#148 mapping collision: 'getPet' and 'GetPet' collide on 'get-pet'", () => {
   requireImpl();
-  const ids = ["getPet", "get-pet"];
-  // The implementation is expected to expose a way to detect collisions across
-  // a set of operationIds. We probe a couple of plausible entry points so the
-  // test stays meaningful regardless of the exact API the implementer picks.
-  let err: unknown = null;
-  try {
-    if (typeof OperationId.assertNoCollisions === "function") {
-      OperationId.assertNoCollisions(ids);
-    } else if (typeof OperationId.fromMany === "function") {
-      OperationId.fromMany(ids);
-    } else if (typeof OperationId.collisionsOf === "function") {
-      const c = OperationId.collisionsOf(ids);
-      if (c && (Array.isArray(c) ? c.length > 0 : true)) {
-        throw new OperationId.MappingCollision(
-          `Mapping collision: 'getPet' and 'get-pet' both map to 'get-pet'`,
-        );
-      }
-    } else {
-      // No detector exposed — that's a Red-Gate failure to be addressed by impl.
-      throw new Error(RED_GATE);
-    }
-  } catch (e) {
-    err = e;
-  }
-  assert(err !== null, "expected a collision error but none was thrown");
-  assert(
-    err instanceof OperationId.MappingCollision,
-    `expected OperationId.MappingCollision, got ${(err as Error)?.constructor?.name}`,
-  );
-  const msg = String((err as Error).message ?? "");
+  // Source ids are deliberately chosen so all three required strings —
+  // both source operationIds AND the colliding kebab name — are
+  // distinct, so the assertions below verify each one independently
+  // (rather than satisfying multiple includes-checks with a single
+  // string that happens to be both a source and the kebab).
+  const ids = ["getPet", "GetPet"];
+  // The implementation must expose a detector that THROWS the error
+  // itself; tests must never construct/throw it on the impl's behalf.
+  // Today the spec contract is `assertNoCollisions(ids)` per #148 §9.
+  const err = assertThrows(
+    () => OperationId.assertNoCollisions(ids),
+    OperationId.MappingCollision,
+  ) as Error;
+  const msg = String(err.message ?? "");
   assert(msg.includes("getPet"), `error should mention 'getPet': ${msg}`);
-  assert(msg.includes("get-pet"), `error should mention 'get-pet': ${msg}`);
+  assert(msg.includes("GetPet"), `error should mention 'GetPet': ${msg}`);
+  assert(msg.includes("get-pet"), `error should mention 'get-pet' kebab: ${msg}`);
 });
 
 // ---------------------------------------------------------------------------
