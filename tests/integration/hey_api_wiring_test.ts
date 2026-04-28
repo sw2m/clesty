@@ -94,32 +94,45 @@ Deno.test("hey-api (#766): compiled binary's `<op> --help` lists path + query fl
 });
 
 // ---------------------------------------------------------------------------
-// Item B — invoking a subcommand on the compiled binary no longer throws
-//          the "not implemented yet (#768)" stub. With hey-api wired, the
-//          action attempts an HTTP request; without a stubbed server it
-//          will fail with a network error rather than the stub message.
+// Item B — invoking a subcommand on the compiled binary actually attempts
+//          an HTTP request via hey-api's typed client. We pin a positive
+//          failure signature: a network error name from the fetch-client
+//          (TypeError / ConnectionRefused / fetch-failed text) when the
+//          target host is unreachable. A binary crash or stub message
+//          would NOT produce these, so this is non-tautological.
 // ---------------------------------------------------------------------------
 
-Deno.test("hey-api (#766): action body no longer throws #768 stub message", async () => {
+Deno.test("hey-api (#766): action body reaches the fetch client (positive network-error signature)", async () => {
   const dir = await tempDir();
   try {
     const out = `${dir}/cli`;
-    const compileR = await runCli([
+    const compileResult = await runCli([
       "compile",
       `${FIXTURE_DIR}parameterized.yaml`,
       "--output",
       out,
     ]);
-    assertEquals(compileR.code, 0, `compile must succeed; stderr:\n${compileR.stderr}`);
-    // Invoke against an unreachable URL so the request fails. We assert
-    // the failure does NOT mention the #768 stub text, proving the
-    // hey-api code path is reached. A real network failure (ECONNREFUSED,
-    // DNS resolution, etc.) is fine.
+    assertEquals(compileResult.code, 0, `compile must succeed; stderr:\n${compileResult.stderr}`);
+    // Invoke against the unreachable default base URL (the spec has no
+    // `servers` set). The action must (a) NOT throw the #768 stub text,
+    // and (b) produce a network-error signature consistent with reaching
+    // the fetch client.
     const run = await runBin(out, ["get-pet", "--id", "1"]);
+    const out_ = run.stdout + run.stderr;
     assert(
-      !/clesty runtime not implemented yet/.test(run.stderr + run.stdout),
-      `expected hey-api code path reached; got:\nstdout: ${run.stdout}\nstderr: ${run.stderr}`,
+      !/clesty runtime not implemented yet/.test(out_),
+      `stub message must not appear; got:\n${out_}`,
     );
+    // Positive signature: at least one of these network-error tokens
+    // must appear in stderr. fetch / TypeError / ECONNREFUSED / refused /
+    // invalid URL — any of them prove control reached the fetch client.
+    const networkErrorRe =
+      /TypeError|fetch failed|ECONNREFUSED|refused|invalid URL|Invalid URL|Network/i;
+    assert(
+      networkErrorRe.test(out_),
+      `expected a network-error signature proving fetch was reached; got:\n${out_}`,
+    );
+    assert(run.code !== 0, `non-zero exit expected on network failure; got ${run.code}`);
   } finally {
     await cleanup(dir);
   }

@@ -24,7 +24,7 @@
  * failure count matches the test count. That is a clean Red signal.
  */
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 // deno-lint-ignore no-explicit-any
@@ -244,25 +244,45 @@ Deno.test("budget: pre-flight reads at most MAX_PREFLIGHT_BYTES (16 KiB) from so
 
 // ---------------------------------------------------------------------------
 // 7. hey-api error wrapping: when hey-api itself rejects a doc that passed
-//    pre-flight, the resulting Compile.HeyApiFailure includes `origin` and
-//    the underlying error message.
+//    pre-flight, the surfaced error is `Compile.HeyApiFailure` carrying
+//    the spec origin and a `cause` chain to the underlying error.
 //
-//    Ignored: this requires the compile-pipeline integration harness (a
-//    hey-api stub or full pipeline driver), which is out of scope for the
-//    Red Gate. Enable when that harness lands.
+//    The cli orchestrator (#769) is what calls hey-api; this test invokes
+//    `compile()` directly with a fixture that passes preflight + ref-safety
+//    but breaks hey-api at parse time (a local `$ref` whose target does
+//    not exist in components.schemas).
 // ---------------------------------------------------------------------------
 
-Deno.test.ignore(
+import { compile } from "../../src/cli.ts";
+import { Compile as PreflightCompile } from "../../src/compile/preflight.ts";
+
+Deno.test(
   "hey-api: a hey-api rejection is wrapped as Compile.HeyApiFailure with origin",
-  () => {
-    // TODO: enable when compile pipeline integration harness lands.
-    // Plan:
-    //   1. Stand up a hey-api stub that throws a known error for a fixture
-    //      that passes pre-flight (e.g. v300.yaml with a deliberately broken
-    //      $ref).
-    //   2. Drive the compile pipeline against that fixture.
-    //   3. Assert the surfaced error is `Compile.HeyApiFailure`, that
-    //      `error.origin` matches the fixture path, and that the underlying
-    //      hey-api error message is included (cause / wrapped message).
+  async () => {
+    const dir = await Deno.makeTempDir({ prefix: "clesty-heyapi-" });
+    try {
+      const fixture = fixturePath("v300-broken-ref.yaml");
+      let thrown: unknown;
+      try {
+        await compile({ spec: fixture, output: `${dir}/bin` });
+      } catch (e) {
+        thrown = e;
+      }
+      assert(thrown !== undefined, "expected a HeyApiFailure throw");
+      assert(
+        thrown instanceof PreflightCompile.HeyApiFailure,
+        `expected Compile.HeyApiFailure, got ${
+          (thrown as { constructor?: { name?: string } })?.constructor?.name
+        }: ${(thrown as Error)?.message}`,
+      );
+      assertStringIncludes(
+        (thrown as { origin: string }).origin,
+        "v300-broken-ref.yaml",
+      );
+    } finally {
+      try {
+        await Deno.remove(dir, { recursive: true });
+      } catch { /* ignore */ }
+    }
   },
 );
