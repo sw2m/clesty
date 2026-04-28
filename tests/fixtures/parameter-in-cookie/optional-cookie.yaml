@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: optional cookie
+  version: 0.0.1
+paths:
+  /me:
+    get:
+      operationId: getMe
+      parameters:
+        - name: preferences
+          in: cookie
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object

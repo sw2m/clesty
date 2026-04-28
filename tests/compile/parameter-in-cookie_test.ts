@@ -1,65 +1,73 @@
 /**
- * Red-Gate scaffold for sw2m/clesty issue #159 — Parameter `in: cookie`.
+ * Phase 2a Red-Gate suite for sw2m/clesty issue #159 — Parameter `in: cookie`.
  *
- * staging: tests are stubbed (`Deno.test.ignore`) until #159 grows a tech
- *          spec and the implementation lands. Activation flow:
- *            1. Flesh out the test bodies against the final tech spec.
- *            2. Replace each `Deno.test.ignore` with `Deno.test`.
- *            3. Remove every `// wip` and `// staging` line.
- *            4. Land impl as a non-test commit descending from the
- *               Red-gate-cleared marker (philosophies §VIII).
- *
- * @module
+ * Mirrors #156 (query) / #157 (header): cookies thread into hey-api's
+ * `cookies: { ... }` block via the same `paramsByLocation` plumbing.
  */
 
-import { assert } from "@std/assert";
+import { assert, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
-// wip: import the code-under-test once the relevant src/compile module
-// grows the wiring for Parameter `in: cookie`.
+const mod = await import("../../src/compile/codegen.ts");
 // deno-lint-ignore no-explicit-any
-let Codegen: any;
-try {
-  Codegen = await import("../../src/compile/codegen.ts");
-} catch {
-  Codegen = null;
-}
+const Codegen: any = (mod as Record<string, unknown>).Codegen ?? mod;
 
 const FIXTURE_DIR = fromFileUrl(
   new URL("../fixtures/parameter-in-cookie/", import.meta.url),
 );
 
-// staging: keep bindings lint-clean while assertions are still WIP.
-void Codegen;
-void FIXTURE_DIR;
+function fixturePath(name: string): string {
+  return `${FIXTURE_DIR}${name}`;
+}
 
-// ---------------------------------------------------------------------------
-// Item A — primary contract.
-// ---------------------------------------------------------------------------
+async function emitSource(fixture: string): Promise<string> {
+  const result = await Codegen.emit(fixturePath(fixture));
+  return typeof result === "string" ? result : (result.source ?? "");
+}
 
-Deno.test.ignore(
-  "#159 (wip): Parameter `in: cookie` — primary contract",
-  () => {
-    // staging: replace this stub once the tech spec on #159 pins down the
-    // exact contract. The shape mirrors the sibling Red-Gate suites
-    // (e.g. tests/compile/responses_test.ts) — graceful import of the
-    // code-under-test, fixture fed in, structural assertion on the
-    // emitted source / behaviour.
-    assert(true, "wip");
-  },
-);
+function flagsMatching(src: string, re: RegExp): Set<string> {
+  const out = new Set<string>();
+  for (const m of src.matchAll(re)) out.add(m[1]);
+  return out;
+}
 
-// ---------------------------------------------------------------------------
-// Item B — refusal / edge case (if applicable per the to-be-written spec).
-// ---------------------------------------------------------------------------
+const REQUIRED_RE = /requiredOption\(\s*["']--([a-zA-Z0-9_-]+)/g;
+const OPTIONAL_RE = /(?<!required)\.option\(\s*["']--([a-zA-Z0-9_-]+)/g;
 
-Deno.test.ignore(
-  "#159 (wip): Parameter `in: cookie` — refusal / edge case",
-  () => {
-    // staging: replace this stub once the tech spec on #159 pins the
-    // refusal / edge-case shape. If the spec turns out to be acceptance-
-    // only (no refusal cases), drop this test and update the activation
-    // checklist in the PR body.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#159): required cookie parameter emits required `--<name>` flag", async () => {
+  const src = await emitSource("required-cookie.yaml");
+  assert(
+    flagsMatching(src, REQUIRED_RE).has("session"),
+    `expected required '--session' flag; src:\n${src}`,
+  );
+});
+
+Deno.test("compile (#159): optional cookie parameter emits a plain `option` flag", async () => {
+  const src = await emitSource("optional-cookie.yaml");
+  assert(
+    !flagsMatching(src, REQUIRED_RE).has("preferences"),
+    `expected '--preferences' to NOT be requiredOption; src:\n${src}`,
+  );
+  assert(
+    flagsMatching(src, OPTIONAL_RE).has("preferences"),
+    `expected optional '--preferences' flag; src:\n${src}`,
+  );
+});
+
+Deno.test("compile (#159): cookie parameter threads into hey-api `cookies: { ... }` block", async () => {
+  const src = await emitSource("required-cookie.yaml");
+  const block = src.match(/cookies\s*:\s*\{([^}]*)\}/);
+  assert(block !== null, `expected a 'cookies: { ... }' block; src:\n${src}`);
+  assertStringIncludes(block[1], "session");
+});
+
+Deno.test("compile (#159): operation with no cookie parameters has no `cookies` block", async () => {
+  const src = await emitSource("no-cookie.yaml");
+  const block = src.match(/cookies\s*:\s*\{([^}]*)\}/);
+  if (block !== null) {
+    assert(
+      block[1].trim().length === 0,
+      `expected empty/absent 'cookies: {}' for no-cookie op; got: ${block[0]}`,
+    );
+  }
+});
