@@ -84,11 +84,6 @@ export type PreflightResult = {
   version: string;
 };
 
-/** Strip a leading UTF-8 BOM (EF BB BF) if present. */
-function strip(text: string): string {
-  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-}
-
 /** Read a source down to MAX_PREFLIGHT_BYTES, returning bytes + origin string. */
 async function read(
   src: string | URL | ReadableStream<Uint8Array>,
@@ -103,13 +98,23 @@ async function read(
     }
     const res = await fetch(src);
     if (!res.body) return { bytes: new Uint8Array(), origin };
-    return { bytes: await readStream(res.body), origin };
+    const bytes = await readStream(res.body);
+    // Cancel the unread remainder so the HTTP connection isn't kept
+    // open after pre-flight stops reading.
+    try {
+      await res.body.cancel();
+    } catch { /* ignore — already drained or locked */ }
+    return { bytes, origin };
   }
   if (src.startsWith("http://") || src.startsWith("https://")) {
     const url = new URL(src);
     const res = await fetch(url);
     if (!res.body) return { bytes: new Uint8Array(), origin: src };
-    return { bytes: await readStream(res.body), origin: src };
+    const bytes = await readStream(res.body);
+    try {
+      await res.body.cancel();
+    } catch { /* ignore */ }
+    return { bytes, origin: src };
   }
   const path = src.startsWith("file:") ? new URL(src) : src;
   return { bytes: await readFile(path), origin: src };
@@ -166,21 +171,26 @@ async function readStream(s: ReadableStream<Uint8Array>): Promise<Uint8Array> {
 
 /**
  * Extract the `openapi:` field's RAW value. Tries the JSON form first
- * (string-quoted, anchored to `{` or `,`), then the YAML form (key at
- * the start of a logical line, optional quotes, value runs to whitespace
- * or `#` comment).
+ * (string-quoted, after `{` or `,`), then the YAML form (key at
+ * line start, optional quotes, value runs to whitespace / quote / `#`).
+ *
+ * Exported for direct unit testing of the parser without I/O — the
+ * effectful `Preflight.check` path tests via fixtures, but `extract`
+ * itself is a pure function.
  *
  * Returns:
  *   - `{kind: "missing"}` — no `openapi:` line found
  *   - `{kind: "non-string", raw}` — bare integer (`openapi: 3`)
  *   - `{kind: "string", raw}` — version string
  */
-function extract(text: string):
+export function extract(text: string):
   | { kind: "missing" }
   | { kind: "non-string"; raw: string }
   | { kind: "string"; raw: string } {
-  // JSON form: `"openapi": "<value>"` after `{` or `,`. Per #107 §3.
-  const json = text.match(/^\s*[{,]\s*"openapi"\s*:\s*"([^"]+)"/m);
+  // JSON form: `"openapi": "<value>"` preceded by `{` or `,`. The
+  // anchor matches `{` for openapi-as-first-key OR `,` for any later
+  // position; both forms occur in real-world OpenAPI JSON.
+  const json = text.match(/[{,]\s*"openapi"\s*:\s*"([^"]+)"/);
   if (json) {
     return { kind: "string", raw: json[1].trim() };
   }
@@ -204,7 +214,8 @@ function extract(text: string):
 export const Preflight = {
   async check(src: string | URL | ReadableStream<Uint8Array>): Promise<PreflightResult> {
     const { bytes, origin } = await read(src);
-    const text = strip(new TextDecoder("utf-8").decode(bytes));
+    // TextDecoder strips a leading UTF-8 BOM by default (ignoreBOM=false).
+    const text = new TextDecoder("utf-8").decode(bytes);
 
     const field = extract(text);
     if (field.kind === "missing") {
