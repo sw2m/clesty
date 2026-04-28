@@ -26,7 +26,10 @@ try {
 }
 
 const FIXTURE_DIR = fromFileUrl(
-  new URL("../fixtures/info-license-identifier-and-info-license-url-both-present-3-1/", import.meta.url),
+  new URL(
+    "../fixtures/info-license-identifier-and-info-license-url-both-present-3-1/",
+    import.meta.url,
+  ),
 );
 
 // staging: keep bindings lint-clean while assertions are still WIP.
