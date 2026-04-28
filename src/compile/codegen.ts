@@ -133,7 +133,12 @@ type ParamGroup = {
  * its values into the corresponding hey-api block (`path`, `query`,
  * `headers`, `cookies`).
  */
-function sourceFor(opId: string, groups: ParamGroup[], deprecated: boolean): string {
+function sourceFor(
+  opId: string,
+  groups: ParamGroup[],
+  deprecated: boolean,
+  baseUrl: string | null,
+): string {
   const flagLines: string[] = [];
   const blocks: string[] = [];
   for (const g of groups) {
@@ -152,10 +157,13 @@ function sourceFor(opId: string, groups: ParamGroup[], deprecated: boolean): str
       blocks.push(`${g.block}: { ${all.map((p) => `${p.name}: opts.${p.name}`).join(", ")} }`);
     }
   }
+  // baseUrl threaded into the hey-api options object so the client call
+  // targets the right host per the OpenAPI servers precedence (op > path
+  // > doc).
+  if (baseUrl !== null) {
+    blocks.unshift(`baseUrl: ${JSON.stringify(baseUrl)}`);
+  }
   const callBody = blocks.length === 0 ? "{}" : `{ ${blocks.join(", ")} }`;
-  // The (DEPRECATED) prefix on the description lands directly on the
-  // `--help` output for the subcommand so users discover the deprecation
-  // without reading the OpenAPI doc.
   const cmdDesc = deprecated ? "(DEPRECATED) " + opId : opId;
   return [
     `program`,
@@ -169,15 +177,24 @@ function sourceFor(opId: string, groups: ParamGroup[], deprecated: boolean): str
   ].filter((l) => l !== "").join("\n");
 }
 
+/** Pick the first server URL from a `servers` array if present and valid. */
+function firstServerUrl(servers: unknown): string | null {
+  if (!Array.isArray(servers) || servers.length === 0) return null;
+  const first = servers[0] as { url?: unknown };
+  return typeof first?.url === "string" ? first.url : null;
+}
+
 function emitFromDoc(doc: Record<string, unknown>): EmitResult {
   const operations: EmitResult["operations"] = {};
   const warnings: Warning[] = [];
   const sources: string[] = [];
 
+  const docServerUrl = firstServerUrl(doc.servers);
   const paths = (doc.paths ?? {}) as Record<string, unknown>;
   for (const path of Object.keys(paths)) {
     const item = paths[path] as Record<string, unknown>;
     const itemLevelParams = (Array.isArray(item.parameters) ? item.parameters : []) as unknown[];
+    const pathServerUrl = firstServerUrl(item.servers);
     for (const method of METHODS) {
       const op = item[method] as Record<string, unknown> | undefined;
       if (!op) continue;
@@ -236,7 +253,11 @@ function emitFromDoc(doc: Record<string, unknown>): EmitResult {
         split("header", "headers"),
         split("cookie", "cookies"),
       ];
-      sources.push(sourceFor(opId, groups, op.deprecated === true));
+      // Precedence per OpenAPI: op-level > path-item-level > doc-level.
+      // First entry's url wins; URL-variable substitution is out of scope.
+      const opServerUrl = firstServerUrl(op.servers);
+      const baseUrl = opServerUrl ?? pathServerUrl ?? docServerUrl;
+      sources.push(sourceFor(opId, groups, op.deprecated === true, baseUrl));
     }
   }
 
