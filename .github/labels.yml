@@ -1,0 +1,26 @@
+# Labels managed by `.github/workflows/vsdd-labels.yml`. Re-run that
+# workflow manually (workflow_dispatch) after editing this file —
+# push-on-main triggers it automatically when this file changes.
+#
+# Mirrors sw2m/philosophies' label set so the VSDD workflows can
+# reference the same names (`spec:goal`, `spec:tech`, `needs-human`,
+# `ci-meta`) consistently across the org.
+#
+# GitHub label descriptions are capped at 100 characters by the API
+# (HTTP 422 otherwise). Keep each `description:` line ≤100 chars.
+
+- name: "spec:goal"
+  color: "0e8a16" # green
+  description: "Goal-spec issue. Many goals OK; no implementation detail. Assigning triggers goal→tech promotion."
+
+- name: "spec:tech"
+  color: "1d76db" # blue
+  description: "Tech-spec issue. One technical problem. Assigning triggers tech→PR 5-phase promotion pipeline."
+
+- name: "needs-human"
+  color: "fbca04" # yellow
+  description: "Promotion pipeline bailed (Red gate or Green gate exhausted retries). Human intervention required."
+
+- name: "ci-meta"
+  color: "5319e7" # purple
+  description: "Issue opened by VSDD CI meta-review consensus. Tracks a CI gap against MEMORY.md."

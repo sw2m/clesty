@@ -1,0 +1,28 @@
+name: VSDD CI Meta-Review
+
+# Thin caller — delegates to sw2m/philosophies. Evaluates clesty's CI
+# workflows against the canonical VSDD doc (sw2m/philosophies' MEMORY.md
+# at main) using BOTH Gemini + Claude in parallel. Disagreement opens a
+# tracked goal-spec issue per gap and fails the consensus check.
+#
+# Fires on PRs that touch CI files. The `paths:` filter mirrors the
+# called workflow's intent — keep meta-review cheap by only firing when
+# CI surface area changes.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  vsdd:
+    uses: sw2m/philosophies/.github/workflows/ci-meta.yml@main
+    secrets: inherit

@@ -1,0 +1,24 @@
+name: VSDD Promotion Pipeline
+
+# Thin caller — delegates to sw2m/philosophies. Assignment-triggered
+# promotion of issues:
+#   - `spec:goal` + assignee org-member → goal decomposed into
+#     N tech-spec sub-issues (one technical problem per §VII).
+#   - `spec:tech` + assignee org-member → 5-phase tech→PR pipeline
+#     (scaffold → author tests → Red gate → implement → Green gate;
+#     retry caps 3, bail with `needs-human` label).
+
+on:
+  issues:
+    types: [assigned]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  vsdd:
+    uses: sw2m/philosophies/.github/workflows/promote.yml@main
+    secrets: inherit

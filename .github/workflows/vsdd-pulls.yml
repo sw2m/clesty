@@ -1,0 +1,21 @@
+name: VSDD Pull Request Review (Phase 3)
+
+# Thin caller — delegates to sw2m/philosophies. Two adversarial
+# reviewers (Gemini + Claude) on the PR diff for cognitive diversity
+# (MEMORY.md §V), §IX symbol audit, and ownership-gating per §I.
+# Advisory only — never gates merge by itself.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, assigned]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  vsdd:
+    uses: sw2m/philosophies/.github/workflows/pr-review.yml@main
+    secrets: inherit
