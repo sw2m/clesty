@@ -1,13 +1,13 @@
 /**
- * Red-Gate scaffold for sw2m/clesty issue #429 — Status code `"1XX"` informational.
+ * Red-Gate scaffold for sw2m/clesty issue #429 — Status code 1XX informational.
  *
- * staging: tests are stubbed (`Deno.test.ignore`) until #429 grows a tech
- *          spec and the implementation lands. Activation flow:
+ * staging: tests are stubbed until #429 grows a tech spec and the
+ *          implementation lands. Activation flow:
  *            1. Flesh out the test bodies against the final tech spec.
- *            2. Replace each `Deno.test.ignore` with `Deno.test`.
- *            3. Remove every `// wip` and `// staging` line.
+ *            2. Replace each Deno.test.ignore with Deno.test.
+ *            3. Remove every // wip and // staging line.
  *            4. Land impl as a non-test commit descending from the
- *               Red-gate-cleared marker (philosophies §VIII).
+ *               Red-gate-cleared marker (philosophies VIII).
  *
  * @module
  */
@@ -16,7 +16,7 @@ import { assert } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 // wip: import the code-under-test once the relevant src/compile module
-// grows the wiring for Status code `"1XX"` informational.
+// grows the wiring for this issue.
 // deno-lint-ignore no-explicit-any
 let Codegen: any;
 try {
@@ -38,28 +38,21 @@ void FIXTURE_DIR;
 // ---------------------------------------------------------------------------
 
 Deno.test.ignore(
-  "#429 (wip): Status code `"1XX"` informational — primary contract",
+  "#429 (wip): primary contract",
   () => {
-    // staging: replace this stub once the tech spec on #429 pins down the
-    // exact contract. The shape mirrors the sibling Red-Gate suites
-    // (e.g. tests/compile/responses_test.ts) — graceful import of the
-    // code-under-test, fixture fed in, structural assertion on the
-    // emitted source / behaviour.
+    // staging: replace once #429 pins the contract.
     assert(true, "wip");
   },
 );
 
 // ---------------------------------------------------------------------------
-// Item B — refusal / edge case (if applicable per the to-be-written spec).
+// Item B — refusal / edge case.
 // ---------------------------------------------------------------------------
 
 Deno.test.ignore(
-  "#429 (wip): Status code `"1XX"` informational — refusal / edge case",
+  "#429 (wip): refusal / edge case",
   () => {
-    // staging: replace this stub once the tech spec on #429 pins the
-    // refusal / edge-case shape. If the spec turns out to be acceptance-
-    // only (no refusal cases), drop this test and update the activation
-    // checklist in the PR body.
+    // staging: replace once #429 pins the refusal shape.
     assert(true, "wip");
   },
 );
