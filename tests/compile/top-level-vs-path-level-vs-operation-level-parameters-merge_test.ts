@@ -26,7 +26,10 @@ try {
 }
 
 const FIXTURE_DIR = fromFileUrl(
-  new URL("../fixtures/top-level-vs-path-level-vs-operation-level-parameters-merge/", import.meta.url),
+  new URL(
+    "../fixtures/top-level-vs-path-level-vs-operation-level-parameters-merge/",
+    import.meta.url,
+  ),
 );
 
 // staging: keep bindings lint-clean while assertions are still WIP.
