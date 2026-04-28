@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: optional mixed
+  version: 0.0.1
+paths:
+  /me:
+    get:
+      operationId: getMe
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: X-Trace-Id
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: preferences
+          in: cookie
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object

@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: required mixed
+  version: 0.0.1
+paths:
+  /me:
+    get:
+      operationId: getMe
+      parameters:
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: X-Tenant
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: session
+          in: cookie
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
