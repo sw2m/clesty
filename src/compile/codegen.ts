@@ -133,7 +133,7 @@ type ParamGroup = {
  * its values into the corresponding hey-api block (`path`, `query`,
  * `headers`, `cookies`).
  */
-function sourceFor(opId: string, groups: ParamGroup[]): string {
+function sourceFor(opId: string, groups: ParamGroup[], deprecated: boolean): string {
   const flagLines: string[] = [];
   const blocks: string[] = [];
   for (const g of groups) {
@@ -153,9 +153,13 @@ function sourceFor(opId: string, groups: ParamGroup[]): string {
     }
   }
   const callBody = blocks.length === 0 ? "{}" : `{ ${blocks.join(", ")} }`;
+  // The (DEPRECATED) prefix on the description lands directly on the
+  // `--help` output for the subcommand so users discover the deprecation
+  // without reading the OpenAPI doc.
+  const cmdDesc = deprecated ? "(DEPRECATED) " + opId : opId;
   return [
     `program`,
-    `  .command("${kebab(opId)}")`,
+    `  .command("${kebab(opId)}", "${cmdDesc}")`,
     flagLines.join("\n"),
     `  .action(async (opts) => {`,
     `    const result = await client.${opId}(${callBody});`,
@@ -232,7 +236,7 @@ function emitFromDoc(doc: Record<string, unknown>): EmitResult {
         split("header", "headers"),
         split("cookie", "cookies"),
       ];
-      sources.push(sourceFor(opId, groups));
+      sources.push(sourceFor(opId, groups, op.deprecated === true));
     }
   }
 

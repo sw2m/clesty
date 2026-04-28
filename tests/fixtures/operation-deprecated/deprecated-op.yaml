@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: deprecated op
+  version: 0.0.1
+paths:
+  /old-thing:
+    get:
+      operationId: getOldThing
+      deprecated: true
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
