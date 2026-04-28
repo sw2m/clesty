@@ -1,0 +1,21 @@
+openapi: 3.0.3
+info:
+  title: op beats path
+  version: 0.0.1
+servers:
+  - url: https://doc.example.com
+paths:
+  /thing:
+    servers:
+      - url: https://path.example.com
+    get:
+      operationId: getThing
+      servers:
+        - url: https://op.example.com
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object

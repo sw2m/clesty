@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: doc only
+  version: 0.0.1
+servers:
+  - url: https://doc.example.com
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
