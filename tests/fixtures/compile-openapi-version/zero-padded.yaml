@@ -1,0 +1,5 @@
+openapi: 3.0.01
+info:
+  title: Zero-padded
+  version: 0.0.1
+paths: {}

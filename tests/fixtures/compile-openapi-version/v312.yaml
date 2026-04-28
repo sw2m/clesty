@@ -1,0 +1,5 @@
+openapi: 3.1.2
+info:
+  title: V312
+  version: 0.0.1
+paths: {}

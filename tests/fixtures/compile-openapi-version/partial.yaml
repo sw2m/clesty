@@ -1,0 +1,5 @@
+openapi: "3.0"
+info:
+  title: Partial
+  version: 0.0.1
+paths: {}
