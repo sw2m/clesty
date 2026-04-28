@@ -184,6 +184,55 @@ function firstServerUrl(servers: unknown): string | null {
   return typeof first?.url === "string" ? first.url : null;
 }
 
+/** Walk every operation looking for a `callbacks` map. Returns
+ * `[{ opId, name, expression }]` entries, one per (callback name,
+ * URL-template-key) pair. The expression is left as the literal
+ * OpenAPI key — runtime expressions like `{$request.body#/...}` are
+ * NOT resolved by clesty; they're rendered verbatim by the
+ * `describe-callbacks` subcommand. */
+type CallbackEntry = { opId: string; name: string; expression: string };
+
+function collectCallbacks(doc: Record<string, unknown>): CallbackEntry[] {
+  const out: CallbackEntry[] = [];
+  const paths = (doc.paths ?? {}) as Record<string, unknown>;
+  for (const path of Object.keys(paths)) {
+    const item = paths[path] as Record<string, unknown>;
+    for (const method of METHODS) {
+      const op = item[method] as Record<string, unknown> | undefined;
+      if (!op) continue;
+      const opId = String(op.operationId ?? "");
+      if (!opId) continue;
+      const callbacks = op.callbacks as Record<string, unknown> | undefined;
+      if (!callbacks) continue;
+      for (const name of Object.keys(callbacks)) {
+        const cb = callbacks[name] as Record<string, unknown>;
+        // Each key inside the callback object is a runtime-expression URL.
+        for (const expression of Object.keys(cb)) {
+          out.push({ opId, name, expression });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Emit the `describe-callbacks` subcommand source — pure print, no
+ * fetch/client call. Returns empty string if no callbacks declared. */
+function describeCallbacksSource(entries: CallbackEntry[]): string {
+  if (entries.length === 0) return "";
+  const lines = entries.map((e) =>
+    `    console.log(${JSON.stringify(`${e.opId} / ${e.name}: ${e.expression}`)});`
+  );
+  return [
+    `program`,
+    `  .command("describe-callbacks", "describe declared out-of-band callbacks")`,
+    `  .action(() => {`,
+    ...lines,
+    `  });`,
+    ``,
+  ].join("\n");
+}
+
 function emitFromDoc(doc: Record<string, unknown>): EmitResult {
   const operations: EmitResult["operations"] = {};
   const warnings: Warning[] = [];
@@ -260,6 +309,11 @@ function emitFromDoc(doc: Record<string, unknown>): EmitResult {
       sources.push(sourceFor(opId, groups, op.deprecated === true, baseUrl));
     }
   }
+
+  // Append the describe-callbacks subcommand if any operation declared
+  // callbacks. The action is a pure printer — no live request issued.
+  const callbackSrc = describeCallbacksSource(collectCallbacks(doc));
+  if (callbackSrc !== "") sources.push(callbackSrc);
 
   return {
     operations,
