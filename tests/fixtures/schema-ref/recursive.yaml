@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: Schema $ref — recursive
+  version: 0.0.1
+paths:
+  /tree:
+    get:
+      operationId: getTree
+      responses:
+        "200":
+          description: A tree node (self-referential)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tree"
+components:
+  schemas:
+    Tree:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tree"

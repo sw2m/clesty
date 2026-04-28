@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Schema $ref — absolute path (refusal case)
+  version: 0.0.1
+paths:
+  /pwn:
+    get:
+      operationId: getPwnAbs
+      responses:
+        "200":
+          description: Absolute filesystem path — clesty pre-flight rejects
+          content:
+            application/json:
+              schema:
+                $ref: "/etc/passwd"
+components: {}
