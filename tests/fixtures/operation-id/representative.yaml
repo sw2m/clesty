@@ -1,0 +1,63 @@
+openapi: 3.0.3
+info:
+  title: Operation IDs — representative styles
+  version: 0.0.1
+# Each operation here exercises one row of the Acceptance table from #148.
+# The integration test compiles this spec and asserts the generated binary's
+# `--help` lists the expected kebab-case subcommand names.
+paths:
+  /camel:
+    get:
+      operationId: listPets
+      summary: camelCase -> list-pets
+      responses: { "200": { description: ok } }
+  /pascal:
+    get:
+      operationId: ListPets
+      summary: PascalCase -> list-pets
+      responses: { "200": { description: ok } }
+  /already-kebab:
+    get:
+      operationId: list-pets
+      summary: kebab passthrough -> list-pets
+      responses: { "200": { description: ok } }
+  /snake:
+    get:
+      operationId: list_pets
+      summary: snake_case -> list-pets
+      responses: { "200": { description: ok } }
+  /flat:
+    get:
+      operationId: listpets
+      summary: flat -> listpets
+      responses: { "200": { description: ok } }
+  /trailing-acronym:
+    get:
+      operationId: getUserByID
+      summary: trailing acronym -> get-user-by-id
+      responses: { "200": { description: ok } }
+  /short-acronym-trail:
+    get:
+      operationId: getURLs
+      summary: acronym + plural -> get-urls
+      responses: { "200": { description: ok } }
+  /interior-acronym:
+    get:
+      operationId: parseHTMLDoc
+      summary: interior acronym -> parse-html-doc
+      responses: { "200": { description: ok } }
+  /version-segment:
+    get:
+      operationId: getV2Pets
+      summary: version digits -> get-v2-pets
+      responses: { "200": { description: ok } }
+  /leading-digit:
+    get:
+      operationId: 2getPets
+      summary: leading digit -> 2-get-pets
+      responses: { "200": { description: ok } }
+  /trim:
+    get:
+      operationId: __listPets__
+      summary: leading/trailing separators trim -> list-pets
+      responses: { "200": { description: ok } }
