@@ -1,0 +1,21 @@
+openapi: 3.1.0
+info:
+  title: Path templating — integer schema coercion
+  version: 0.0.1
+paths:
+  /n/{n}:
+    get:
+      operationId: getByNum
+      parameters:
+        - name: n
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A number-keyed thing
+          content:
+            application/json:
+              schema:
+                type: object

@@ -1,0 +1,21 @@
+openapi: 3.1.0
+info:
+  title: Path templating — boolean schema coercion
+  version: 0.0.1
+paths:
+  /flag/{flag}:
+    get:
+      operationId: getByFlag
+      parameters:
+        - name: flag
+          in: path
+          required: true
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: A boolean-keyed thing
+          content:
+            application/json:
+              schema:
+                type: object
