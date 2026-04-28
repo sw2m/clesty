@@ -26,7 +26,10 @@ try {
 }
 
 const FIXTURE_DIR = fromFileUrl(
-  new URL("../fixtures/server-url-templating-with-multiple-required-variables-and-one-with-no-default/", import.meta.url),
+  new URL(
+    "../fixtures/server-url-templating-with-multiple-required-variables-and-one-with-no-default/",
+    import.meta.url,
+  ),
 );
 
 // staging: keep bindings lint-clean while assertions are still WIP.
