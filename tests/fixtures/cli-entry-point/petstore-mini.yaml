@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: petstore-mini
+  version: 0.0.1
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object

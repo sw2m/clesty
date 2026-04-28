@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: parent escape
+  version: 0.0.1
+paths:
+  /pwn:
+    get:
+      operationId: getPwn
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "../../etc/passwd"
