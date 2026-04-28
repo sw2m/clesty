@@ -5,7 +5,8 @@
     "jsr:@std/internal@^1.0.12": "1.0.13",
     "jsr:@std/path@^1.0.8": "1.1.4",
     "jsr:@std/yaml@^1.0.5": "1.1.0",
-    "npm:@hey-api/openapi-ts@~0.96.1": "0.96.1_typescript@6.0.3"
+    "npm:@hey-api/openapi-ts@~0.96.1": "0.96.1_typescript@6.0.3",
+    "npm:fast-check@3": "3.23.2"
   },
   "jsr": {
     "@std/assert@1.0.19": {
@@ -164,6 +165,12 @@
     "exsolve@1.0.8": {
       "integrity": "sha512-LmDxfWXwcTArk8fUEnOfSZpHOJ6zOMUJKOtFLFqJLoKJetuQG874Uc7/Kki7zFLzYybmZhp1M7+98pfMqeX8yA=="
     },
+    "fast-check@3.23.2": {
+      "integrity": "sha512-h5+1OzzfCC3Ef7VbtKdcv7zsstUQwUDlYpUTvjeUsJAssPgLn7QzbboPtL5ro04Mq0rPOsMzl7q5hIbRs2wD1A==",
+      "dependencies": [
+        "pure-rand"
+      ]
+    },
     "get-tsconfig@4.14.0": {
       "integrity": "sha512-yTb+8DXzDREzgvYmh6s9vHsSVCHeC0G3PI5bEXNBHtmshPnO+S5O7qgLEOn0I5QvMy6kpZN8K1NKGyilLb93wA==",
       "dependencies": [
@@ -235,6 +242,9 @@
     "powershell-utils@0.1.0": {
       "integrity": "sha512-dM0jVuXJPsDN6DvRpea484tCUaMiXWjuCn++HGTqUWzGDjv5tZkEZldAJ/UMlqRYGFrD/etByo4/xOuC/snX2A=="
     },
+    "pure-rand@6.1.0": {
+      "integrity": "sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA=="
+    },
     "rc9@3.0.1": {
       "integrity": "sha512-gMDyleLWVE+i6Sgtc0QbbY6pEKqYs97NGi6isHQPqYlLemPoO8dxQ3uGi0f4NiP98c+jMW6cG1Kx9dDwfvqARQ==",
       "dependencies": [
@@ -292,7 +302,8 @@
       "jsr:@std/assert@^1.0.10",
       "jsr:@std/path@^1.0.8",
       "jsr:@std/yaml@^1.0.5",
-      "npm:@hey-api/openapi-ts@~0.96.1"
+      "npm:@hey-api/openapi-ts@~0.96.1",
+      "npm:fast-check@3"
     ]
   }
 }
