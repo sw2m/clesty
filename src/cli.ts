@@ -230,18 +230,33 @@ await main();
 `;
 }
 
+/** Resolve `args.spec` to the form each downstream step wants. URL inputs
+ * pass through unchanged; filesystem paths get absolutized so the
+ * downstream `Codegen.emit()` and hey-api both see a canonical path
+ * regardless of the caller's CWD. Stream input (stdin) is deferred —
+ * the CLI's positional arg today is path-or-URL only. */
+function resolveSpec(spec: string): { source: string; isUrl: boolean } {
+  if (spec.startsWith("http://") || spec.startsWith("https://") || spec.startsWith("file:")) {
+    return { source: spec, isUrl: true };
+  }
+  return { source: isAbsolute(spec) ? spec : resolve(spec), isUrl: false };
+}
+
 /** Compile a spec into a self-contained binary at `args.output`. */
 export async function compile(args: CompileArgs): Promise<void> {
-  const specPath = isAbsolute(args.spec) ? args.spec : resolve(args.spec);
+  const { source: specSource, isUrl } = resolveSpec(args.spec);
 
-  // 1. Preflight (#107).
-  await Preflight.check(specPath);
+  // 1. Preflight (#107) — accepts paths and URLs.
+  await Preflight.check(isUrl ? new URL(specSource) : specSource);
 
-  // 2. Ref-safety (#241).
-  await checkRefSafety(specPath, { allowRefRoot: args.allowRefRoot });
+  // 2. Ref-safety (#241) — only meaningful for local files. Remote specs
+  // are pulled by hey-api over HTTPS; the boundary check doesn't apply.
+  if (!isUrl) {
+    await checkRefSafety(specSource, { allowRefRoot: args.allowRefRoot });
+  }
 
   // 3. Codegen (#130 etc.).
-  const result = await emit(specPath);
+  const result = await emit(specSource);
 
   // 4-6. hey-api typed client + entry composition + deno compile, all in
   // a single tmp dir so the deno-compile import resolution is stable.
@@ -249,15 +264,16 @@ export async function compile(args: CompileArgs): Promise<void> {
   try {
     // 4. hey-api: produce the typed SDK at <tmp>/generated/. Wrap any
     // throw as Compile.HeyApiFailure so callers get a uniform error
-    // surface (#107 §"Errors").
+    // surface (#107 §"Errors"). Hey-api accepts both filesystem paths
+    // and remote URLs as `input`.
     try {
       await createClient({
-        input: specPath,
+        input: specSource,
         output: { path: join(tmp, "generated") },
         plugins: ["@hey-api/client-fetch"],
       });
     } catch (cause) {
-      throw new Compile.HeyApiFailure(specPath, cause);
+      throw new Compile.HeyApiFailure(specSource, cause);
     }
 
     // 5. Compose the entry — the `import "./generated/sdk.gen.ts"` is
