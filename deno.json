@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "exports": "./src/mod.ts",
   "tasks": {
-    "test": "deno test --allow-read",
-    "test:coverage": "deno test --allow-read --coverage=coverage && deno coverage coverage",
+    "test": "deno test --allow-read --allow-write",
+    "test:coverage": "deno test --allow-read --allow-write --coverage=coverage && deno coverage coverage",
     "fmt": "deno fmt",
     "fmt:check": "deno fmt --check",
     "lint": "deno lint",
