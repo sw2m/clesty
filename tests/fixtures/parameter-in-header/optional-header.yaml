@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: optional header
+  version: 0.0.1
+paths:
+  /tenants:
+    get:
+      operationId: listTenants
+      parameters:
+        - name: X-Trace-Id
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
