@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: multi callbacks
+  version: 0.0.1
+paths:
+  /subscribe:
+    post:
+      operationId: subscribe
+      callbacks:
+        onUpdate:
+          "{$request.body#/onUpdateUrl}":
+            post:
+              operationId: onUpdate
+              responses:
+                "200":
+                  description: ok
+                  content:
+                    application/json:
+                      schema:
+                        type: object
+        onDelete:
+          "{$request.body#/onDeleteUrl}":
+            post:
+              operationId: onDelete
+              responses:
+                "200":
+                  description: ok
+                  content:
+                    application/json:
+                      schema:
+                        type: object
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
