@@ -1,0 +1,27 @@
+openapi: 3.1.0
+info:
+  title: Exact and Range
+  version: 0.0.1
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      responses:
+        "200":
+          description: OK exact
+          content:
+            application/json:
+              schema:
+                type: object
+        "2XX":
+          description: 2xx range
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          description: fallback
+          content:
+            application/json:
+              schema:
+                type: object

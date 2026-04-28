@@ -1,0 +1,11 @@
+openapi: 3.1.0
+info:
+  title: 204 No Body
+  version: 0.0.1
+paths:
+  /thing:
+    delete:
+      operationId: deleteThing
+      responses:
+        "204":
+          description: No Content
