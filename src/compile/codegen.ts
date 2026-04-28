@@ -93,7 +93,7 @@ function pathVars(template: string): string[] {
   return out;
 }
 
-type ParamDecl = { name: string; in: string; required?: boolean };
+type ParamDecl = { name: string; in: string; required?: boolean; deprecated?: boolean };
 
 function paramsByLocation(
   parameters: unknown,
@@ -101,6 +101,14 @@ function paramsByLocation(
 ): ParamDecl[] {
   if (!Array.isArray(parameters)) return [];
   return (parameters as ParamDecl[]).filter((p) => p && p.in === loc && typeof p.name === "string");
+}
+
+/** Build the description string for a parameter's CLI option. Includes the
+ * literal "(DEPRECATED)" token when `p.deprecated` is true so users
+ * reading `--help` see the warning without consulting the OpenAPI doc. */
+function describe(p: ParamDecl, role: string, block: string): string {
+  const prefix = p.deprecated === true ? "(DEPRECATED) " : "";
+  return `${prefix}${role} ${block} parameter ${p.name}`;
 }
 
 function kebab(opId: string): string {
@@ -131,12 +139,12 @@ function sourceFor(opId: string, groups: ParamGroup[]): string {
   for (const g of groups) {
     for (const p of g.required) {
       flagLines.push(
-        `  .requiredOption("--${p.name} <${p.name}>", "required ${g.block} parameter ${p.name}")`,
+        `  .requiredOption("--${p.name} <${p.name}>", "${describe(p, "required", g.block)}")`,
       );
     }
     for (const p of g.optional) {
       flagLines.push(
-        `  .option("--${p.name} <${p.name}>", "optional ${g.block} parameter ${p.name}")`,
+        `  .option("--${p.name} <${p.name}>", "${describe(p, "optional", g.block)}")`,
       );
     }
     const all = [...g.required, ...g.optional];
