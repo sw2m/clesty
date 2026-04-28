@@ -1,87 +1,82 @@
 /**
- * Red-Gate scaffold for sw2m/clesty issue #154 — Operation `security`.
+ * Phase 2a Red-Gate suite for sw2m/clesty issue #154 — Operation `security`.
  *
- * staging: tests are stubbed (`Deno.test.ignore`) until the tech spec lands
- *          on issue #154 and the implementation is written. To activate:
- *            1. Flesh out the test bodies against the final tech spec.
- *            2. Replace each `Deno.test.ignore` with `Deno.test`.
- *            3. Remove every `// wip` and `// staging` line.
- *            4. Add the implementation in a follow-up commit that descends
- *               from the Red-gate-cleared marker — see philosophies §VIII
- *               (4-Result Rule) and the bootstrap pattern used in #453-#457.
+ * Every operation's effective security is the per-operation `security`
+ * array if present, otherwise the doc-level `security` array. An empty
+ * `security: []` removes auth on that operation entirely.
  *
- * Goal (from the linked goal-spec, issue #3):
- *   - Per-op `security` overrides top-level.
- *   - `security: []` removes auth on the operation entirely.
- *   - Non-empty per-op `security` replaces the inherited set.
+ * For each effective security requirement, the codegen emits a CLI flag
+ * derived from the named scheme in `components.securitySchemes`. The
+ * exact flag shape per scheme:
+ *   - apiKey:     `--api-key <value>`
+ *   - http bearer: `--bearer-token <token>`
  *
- * @module
+ * Other schemes (oauth2 flows, mutualTLS) are out of scope for this PR
+ * and consolidated under #154; they re-open if a clesty-side gap appears.
  */
 
 import { assert } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
-// wip: import the code-under-test once src/compile/codegen.ts grows the
-// security wiring. The graceful try/import pattern from sibling Red-Gate
-// suites (e.g. tests/compile/responses_test.ts) is the canonical shape.
+const mod = await import("../../src/compile/codegen.ts");
 // deno-lint-ignore no-explicit-any
-let Codegen: any;
-try {
-  Codegen = await import("../../src/compile/codegen.ts");
-} catch {
-  Codegen = null;
-}
+const Codegen: any = (mod as Record<string, unknown>).Codegen ?? mod;
 
 const FIXTURE_DIR = fromFileUrl(
   new URL("../fixtures/operation-security/", import.meta.url),
 );
 
-// staging: keep the unused-binding lint-clean while the assertions are
-// still WIP. Drop these two no-ops when the tests un-ignore.
-void Codegen;
-void FIXTURE_DIR;
+async function emitSource(fixture: string): Promise<string> {
+  const result = await Codegen.emit(`${FIXTURE_DIR}${fixture}`);
+  return typeof result === "string" ? result : (result.source ?? "");
+}
 
-// ---------------------------------------------------------------------------
-// Item A — Empty `security: []` on an operation removes auth.
-// ---------------------------------------------------------------------------
+/** Find the flags declared inside the action block for a given subcommand. */
+function flagsForOp(src: string, kebab: string): string {
+  const re = new RegExp(
+    `\\.command\\(\\s*["']${kebab}["'][\\s\\S]*?\\.action\\(`,
+    "m",
+  );
+  const m = src.match(re);
+  return m ? src.slice(m.index!, m.index! + m[0].length) : "";
+}
 
-Deno.test.ignore(
-  "#154 (wip): operation with `security: []` emits no auth flag",
-  () => {
-    // staging: build a fixture where the doc has top-level `security: [...]`
-    // but the operation overrides with `security: []`. Compile the spec via
-    // `Codegen.emit(specPath)` and assert the generated subcommand source
-    // does NOT declare any auth-bearing CLI flag (no `--token`, `--api-key`,
-    // etc. tied to that operation).
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#154): doc-level security inherited by operation emits auth flag", async () => {
+  const src = await emitSource("doc-level-only.yaml");
+  const block = flagsForOp(src, "get-thing");
+  assert(
+    /--api-key/.test(block),
+    `expected '--api-key' flag inherited from doc-level security; block:\n${block}`,
+  );
+});
 
-// ---------------------------------------------------------------------------
-// Item B — Non-empty per-op `security` replaces the inherited set.
-// ---------------------------------------------------------------------------
+Deno.test("compile (#154): operation `security: []` removes inherited auth flag", async () => {
+  const src = await emitSource("op-removes-auth.yaml");
+  const block = flagsForOp(src, "get-thing");
+  assert(
+    !/--api-key/.test(block),
+    `expected NO '--api-key' flag for op with security: []; block:\n${block}`,
+  );
+});
 
-Deno.test.ignore(
-  "#154 (wip): non-empty operation `security` replaces inherited top-level set",
-  () => {
-    // staging: top-level `security: [{ apiKey: [] }]`; operation overrides
-    // with `security: [{ bearerAuth: [] }]`. Assert generated subcommand
-    // declares the bearerAuth-derived flag and NOT the apiKey-derived one.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#154): non-empty op-level security replaces doc-level inherited set", async () => {
+  const src = await emitSource("op-replaces.yaml");
+  const block = flagsForOp(src, "get-thing");
+  assert(
+    /--bearer-token/.test(block),
+    `expected '--bearer-token' from op-level security; block:\n${block}`,
+  );
+  assert(
+    !/--api-key/.test(block),
+    `expected '--api-key' to NOT carry through (replaced); block:\n${block}`,
+  );
+});
 
-// ---------------------------------------------------------------------------
-// Item C — `security` OR-alternatives: any one in the list satisfies auth.
-// ---------------------------------------------------------------------------
-
-Deno.test.ignore(
-  "#154 (wip): operation `security` OR-alternatives are runnable with any one",
-  () => {
-    // staging: operation with `security: [{ apiKey: [] }, { bearerAuth: [] }]`.
-    // Assert the generated subcommand surface admits either flag set —
-    // exact CLI shape (mutually-exclusive groups vs. precedence ordering)
-    // is part of the tech-spec to be written on #154.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#154): no security anywhere → no auth flags", async () => {
+  const src = await emitSource("no-security.yaml");
+  const block = flagsForOp(src, "get-thing");
+  assert(
+    !/--api-key|--bearer-token/.test(block),
+    `expected no auth flags for unsecured op; block:\n${block}`,
+  );
+});
