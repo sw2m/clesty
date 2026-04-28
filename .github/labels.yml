@@ -10,17 +10,17 @@
 # (HTTP 422 otherwise). Keep each `description:` line ≤100 chars.
 
 - name: "spec:goal"
-  color: "0e8a16"  # green
+  color: "0e8a16" # green
   description: "Goal-spec issue. Many goals OK; no implementation detail. Assigning triggers goal→tech promotion."
 
 - name: "spec:tech"
-  color: "1d76db"  # blue
+  color: "1d76db" # blue
   description: "Tech-spec issue. One technical problem. Assigning triggers tech→PR 5-phase promotion pipeline."
 
 - name: "needs-human"
-  color: "fbca04"  # yellow
+  color: "fbca04" # yellow
   description: "Promotion pipeline bailed (Red gate or Green gate exhausted retries). Human intervention required."
 
 - name: "ci-meta"
-  color: "5319e7"  # purple
+  color: "5319e7" # purple
   description: "Issue opened by VSDD CI meta-review consensus. Tracks a CI gap against MEMORY.md."
