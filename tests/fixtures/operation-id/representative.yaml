@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: Operation IDs — representative styles
+  version: 0.0.1
+# Each operation here exercises one row of the Acceptance table from #148.
+# Names are deliberately distinct so that no two rows collapse to the same
+# kebab — otherwise compilation would fail with OperationId.MappingCollision
+# before the integration test could check the binary's --help output.
+paths:
+  /camel:
+    get:
+      operationId: listPets
+      summary: camelCase -> list-pets
+      responses: { "200": { description: ok } }
+  /pascal:
+    get:
+      operationId: ShowUser
+      summary: PascalCase -> show-user
+      responses: { "200": { description: ok } }
+  /already-kebab:
+    get:
+      operationId: delete-item
+      summary: kebab passthrough -> delete-item
+      responses: { "200": { description: ok } }
+  /snake:
+    get:
+      operationId: rename_album
+      summary: snake_case -> rename-album
+      responses: { "200": { description: ok } }
+  /flat:
+    get:
+      operationId: pingserver
+      summary: flat -> pingserver
+      responses: { "200": { description: ok } }
+  /trailing-acronym:
+    get:
+      operationId: getUserByID
+      summary: trailing acronym -> get-user-by-id
+      responses: { "200": { description: ok } }
+  /short-acronym-trail:
+    get:
+      operationId: fetchURLs
+      summary: acronym + plural -> fetch-urls
+      responses: { "200": { description: ok } }
+  /interior-acronym:
+    get:
+      operationId: parseHTMLDoc
+      summary: interior acronym -> parse-html-doc
+      responses: { "200": { description: ok } }
+  /version-segment:
+    get:
+      operationId: getV2Pets
+      summary: version digits -> get-v2-pets
+      responses: { "200": { description: ok } }
+  /leading-digit:
+    get:
+      operationId: 2getOrders
+      summary: leading digit -> 2-get-orders
+      responses: { "200": { description: ok } }
+  /trim:
+    get:
+      operationId: __syncWidgets__
+      summary: leading/trailing separators trim -> sync-widgets
+      responses: { "200": { description: ok } }
