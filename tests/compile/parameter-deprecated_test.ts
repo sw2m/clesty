@@ -1,65 +1,57 @@
 /**
- * Red-Gate scaffold for sw2m/clesty issue #163 — Parameter `deprecated`.
+ * Phase 2a Red-Gate suite for sw2m/clesty issue #163 — Parameter `deprecated`.
  *
- * staging: tests are stubbed (`Deno.test.ignore`) until #163 grows a tech
- *          spec and the implementation lands. Activation flow:
- *            1. Flesh out the test bodies against the final tech spec.
- *            2. Replace each `Deno.test.ignore` with `Deno.test`.
- *            3. Remove every `// wip` and `// staging` line.
- *            4. Land impl as a non-test commit descending from the
- *               Red-gate-cleared marker (philosophies §VIII).
- *
- * @module
+ * `deprecated: true` on a parameter must surface in the generated CLI so a
+ * user reading `--help` learns the flag is on the way out without having
+ * to read the OpenAPI doc directly. The exact rendering is part of the
+ * codegen contract; this test pins down the structural shape: the
+ * generated source contains the literal string "(DEPRECATED)" inside the
+ * option's description for any deprecated parameter.
  */
 
 import { assert } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
-// wip: import the code-under-test once the relevant src/compile module
-// grows the wiring for Parameter `deprecated`.
+const mod = await import("../../src/compile/codegen.ts");
 // deno-lint-ignore no-explicit-any
-let Codegen: any;
-try {
-  Codegen = await import("../../src/compile/codegen.ts");
-} catch {
-  Codegen = null;
-}
+const Codegen: any = (mod as Record<string, unknown>).Codegen ?? mod;
 
 const FIXTURE_DIR = fromFileUrl(
   new URL("../fixtures/parameter-deprecated/", import.meta.url),
 );
 
-// staging: keep bindings lint-clean while assertions are still WIP.
-void Codegen;
-void FIXTURE_DIR;
+async function emitSource(fixture: string): Promise<string> {
+  const result = await Codegen.emit(`${FIXTURE_DIR}${fixture}`);
+  return typeof result === "string" ? result : (result.source ?? "");
+}
 
-// ---------------------------------------------------------------------------
-// Item A — primary contract.
-// ---------------------------------------------------------------------------
+Deno.test("compile (#163): deprecated query parameter description carries (DEPRECATED) marker", async () => {
+  const src = await emitSource("deprecated-query.yaml");
+  // The deprecation marker should be on the line that declares the flag,
+  // not just somewhere in the source. Match either an `option(...)` or
+  // `requiredOption(...)` line whose description contains DEPRECATED.
+  const match = src.match(/(?:requiredOption|option)\(\s*["']--legacy[^)]*DEPRECATED/i);
+  assert(
+    match !== null,
+    `expected '--legacy' option's description to include DEPRECATED; src:\n${src}`,
+  );
+});
 
-Deno.test.ignore(
-  "#163 (wip): Parameter `deprecated` — primary contract",
-  () => {
-    // staging: replace this stub once the tech spec on #163 pins down the
-    // exact contract. The shape mirrors the sibling Red-Gate suites
-    // (e.g. tests/compile/responses_test.ts) — graceful import of the
-    // code-under-test, fixture fed in, structural assertion on the
-    // emitted source / behaviour.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#163): non-deprecated parameter has no DEPRECATED marker", async () => {
+  const src = await emitSource("active-query.yaml");
+  // Control fixture — no parameter has deprecated: true. Source should
+  // contain no DEPRECATED tokens at all.
+  assert(
+    !/DEPRECATED/i.test(src),
+    `expected no DEPRECATED token for active parameters; src:\n${src}`,
+  );
+});
 
-// ---------------------------------------------------------------------------
-// Item B — refusal / edge case (if applicable per the to-be-written spec).
-// ---------------------------------------------------------------------------
-
-Deno.test.ignore(
-  "#163 (wip): Parameter `deprecated` — refusal / edge case",
-  () => {
-    // staging: replace this stub once the tech spec on #163 pins the
-    // refusal / edge-case shape. If the spec turns out to be acceptance-
-    // only (no refusal cases), drop this test and update the activation
-    // checklist in the PR body.
-    assert(true, "wip");
-  },
-);
+Deno.test("compile (#163): deprecated header parameter also marked", async () => {
+  const src = await emitSource("deprecated-header.yaml");
+  const match = src.match(/(?:requiredOption|option)\(\s*["']--X-Old[^)]*DEPRECATED/i);
+  assert(
+    match !== null,
+    `expected '--X-Old' header option to include DEPRECATED; src:\n${src}`,
+  );
+});
