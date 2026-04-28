@@ -96,28 +96,27 @@ async function read(
     if (src.protocol === "file:") {
       return { bytes: await readFile(src), origin };
     }
-    const res = await fetch(src);
-    if (!res.body) return { bytes: new Uint8Array(), origin };
-    const bytes = await readStream(res.body);
-    // Cancel the unread remainder so the HTTP connection isn't kept
-    // open after pre-flight stops reading.
-    try {
-      await res.body.cancel();
-    } catch { /* ignore — already drained or locked */ }
-    return { bytes, origin };
+    return { bytes: await fetchBytes(src), origin };
   }
   if (src.startsWith("http://") || src.startsWith("https://")) {
-    const url = new URL(src);
-    const res = await fetch(url);
-    if (!res.body) return { bytes: new Uint8Array(), origin: src };
-    const bytes = await readStream(res.body);
-    try {
-      await res.body.cancel();
-    } catch { /* ignore */ }
-    return { bytes, origin: src };
+    return { bytes: await fetchBytes(new URL(src)), origin: src };
   }
   const path = src.startsWith("file:") ? new URL(src) : src;
   return { bytes: await readFile(path), origin: src };
+}
+
+async function fetchBytes(url: URL): Promise<Uint8Array> {
+  const res = await fetch(url);
+  if (!res.body) return new Uint8Array();
+  // Always cancel the body, even if readStream throws — leaving the
+  // HTTP connection un-cancelled would keep it open.
+  try {
+    return await readStream(res.body);
+  } finally {
+    try {
+      await res.body.cancel();
+    } catch { /* ignore — already drained, locked, or aborted */ }
+  }
 }
 
 async function readFile(path: string | URL): Promise<Uint8Array> {
@@ -187,10 +186,12 @@ export function extract(text: string):
   | { kind: "missing" }
   | { kind: "non-string"; raw: string }
   | { kind: "string"; raw: string } {
-  // JSON form: `"openapi": "<value>"` preceded by `{` or `,`. The
-  // anchor matches `{` for openapi-as-first-key OR `,` for any later
-  // position; both forms occur in real-world OpenAPI JSON.
-  const json = text.match(/[{,]\s*"openapi"\s*:\s*"([^"]+)"/);
+  // JSON form per #107 §3: `^\s*[{,]\s*"openapi"\s*:\s*"<value>"`.
+  // Anchored to a logical line start so a stray `{"openapi": ...}`
+  // inside a YAML description block can't hijack the result. The `\s*`
+  // run between the brace/comma and the `"openapi"` matches across
+  // newlines, so multi-line JSON pretty-printing still resolves.
+  const json = text.match(/^\s*[{,]\s*"openapi"\s*:\s*"([^"]+)"/m);
   if (json) {
     return { kind: "string", raw: json[1].trim() };
   }
