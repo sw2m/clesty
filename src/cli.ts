@@ -380,16 +380,39 @@ export async function compile(args: CompileArgs): Promise<void> {
     }
 
     // 5. Compose the entry — the `import "./generated/sdk.gen.ts"` is
-    // resolved by deno compile inside the tmp dir.
+    // resolved by deno compile inside the tmp dir. Also write a
+    // minimal `deno.json` that maps the `@hey-api/client-fetch` bare
+    // specifier hey-api's generated SDK imports — without it, `deno
+    // compile` would walk UP from tmp and might not find a mapping
+    // (e.g. when clesty is invoked from a directory without a
+    // deno.json).
     const entry = composeEntry(result.source);
     const entryPath = join(tmp, "entry.ts");
     await Deno.writeTextFile(entryPath, entry);
+    await Deno.writeTextFile(
+      join(tmp, "deno.json"),
+      JSON.stringify({
+        imports: {
+          "@hey-api/client-fetch": "npm:@hey-api/client-fetch",
+        },
+      }),
+    );
 
     // 6. deno compile → self-contained binary at args.output.
+    // We invoke the `deno` binary by name (not via `Deno.execPath()`)
+    // so the right tool is used regardless of how clesty itself is
+    // distributed. When clesty is run via `deno run`, `Deno.execPath`
+    // returns deno — fine. When clesty is itself `deno compile`d
+    // (#769's deliverable), `Deno.execPath` returns the clesty binary,
+    // and recursing into it with `compile --quiet ...` would crash.
+    // Calling `"deno"` directly side-steps that; the user must have
+    // deno on PATH for clesty to bundle. (The follow-up to drop that
+    // requirement — embedding the deno toolchain — is a separate
+    // design decision.)
     // --sloppy-imports because hey-api's generated TS uses Node-style
     // relative imports without `.ts` extensions; Deno requires explicit
     // extensions otherwise.
-    const compileCmd = new Deno.Command(Deno.execPath(), {
+    const compileCmd = new Deno.Command("deno", {
       args: [
         "compile",
         "--quiet",
