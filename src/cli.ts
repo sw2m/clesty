@@ -349,10 +349,15 @@ export async function compile(args: CompileArgs): Promise<void> {
       await checkRefSafety(input, { allowRefRoot });
     } catch (e) {
       if (rewriteOrigin && e instanceof RefEscapesRoot) {
-        // The error message embeds the temp file's containing dir.
-        // Rewrite to the user-visible identifier so the surfaced text
-        // matches what the caller typed.
-        e.message = e.message.split(input).join(origin);
+        // The original error embeds `e.root` (the canonicalized allowed
+        // root directory) — for stdin/remote that's our internal temp
+        // path. Re-throw a fresh RefEscapesRoot whose root is the user-
+        // visible origin so neither `.message` nor `.root` leak the
+        // temp dir to the caller.
+        throw new RefEscapesRoot(`$ref escapes the allowed root`, {
+          ref: e.ref,
+          root: origin,
+        });
       }
       throw e;
     }
