@@ -24,8 +24,7 @@
  * @module
  */
 
-import { isAbsolute, join, resolve } from "@std/path";
-import * as Yaml from "@std/yaml";
+import { fromFileUrl, isAbsolute, join, resolve } from "@std/path";
 import { createClient } from "@hey-api/openapi-ts";
 import { Compile, Preflight } from "./compile/preflight.ts";
 import { checkRefSafety, RefEscapesRoot } from "./compile/ref-safety.ts";
@@ -238,48 +237,27 @@ await main();
 
 type SpecSource =
   | { kind: "path"; path: string }
-  | { kind: "url"; url: string }
+  | { kind: "remote"; url: string }
   | { kind: "stdin" };
 
-/** Classify `args.spec`. URL inputs pass through unchanged; absolute /
- * relative filesystem paths get absolutized; the literal `-` means
- * "read from stdin". The stdin case is materialized to a temp file
- * inside `compile()` so preflight, ref-safety, codegen, and hey-api
- * each consume the same bytes — the tee/buffer/handoff design called
- * out in #766 §Scope. */
+/** Classify `args.spec`.
+ *
+ *   - `-` → stdin sentinel.
+ *   - `http://` / `https://` URL → remote (fetch once into the bundle).
+ *   - `file:` URL → converted to a path via `fromFileUrl` so ref-safety
+ *     applies normally (otherwise a `file:` URL would let `$ref`s escape
+ *     the spec's directory unchecked — a real security gap).
+ *   - bare path → absolutized.
+ */
 function classifySpec(spec: string): SpecSource {
   if (spec === "-") return { kind: "stdin" };
-  if (spec.startsWith("http://") || spec.startsWith("https://") || spec.startsWith("file:")) {
-    return { kind: "url", url: spec };
+  if (spec.startsWith("http://") || spec.startsWith("https://")) {
+    return { kind: "remote", url: spec };
+  }
+  if (spec.startsWith("file:")) {
+    return { kind: "path", path: fromFileUrl(spec) };
   }
   return { kind: "path", path: isAbsolute(spec) ? spec : resolve(spec) };
-}
-
-/** Drain the readable stream into a Uint8Array. Used to materialize a
- * stdin spec to disk so all downstream consumers see the same bytes. */
-async function readAll(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  const reader = stream.getReader();
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        total += value.byteLength;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, off);
-    off += chunk.byteLength;
-  }
-  return out;
 }
 
 /** Rewrite an error's `origin` (and `message` substring) from a temp
@@ -307,77 +285,73 @@ export async function compile(args: CompileArgs): Promise<void> {
   const tmp = await Deno.makeTempDir({ prefix: "clesty-bundle-" });
 
   try {
-    // Stream handoff: stdin → temp file → all downstream consumers.
-    // Writing once to disk and passing the path is the simplest
-    // tee/buffer that satisfies preflight + ref-safety + hey-api
-    // (which all want a path or URL, not a live stream).
+    // Materialize once → all consumers read from the same on-disk bytes.
+    // Closes #766's stream-handoff scope item AND the URL-TOCTOU concern:
+    // stdin gets drained into a temp file; remote URLs get fetched once
+    // and written to a temp file; on-disk paths use the file the caller
+    // named. After this step `input` is always a local path that
+    // preflight, ref-safety, codegen, and hey-api all read.
     //
-    // `inputForHeyApi` is what we hand to hey-api (path / URL).
-    // `originOverride` (when non-null) tells the error-rewriting helper
-    // what to substitute in the surfaced origin so the user sees the
-    // identifier they actually typed (path / URL / `<stdin>`) rather
-    // than the temp file we chose internally.
-    let inputForHeyApi: string;
-    let originOverride: string | null = null;
+    // `origin` is the user-visible identifier — the path/URL the caller
+    // typed, or `<stdin>` for stream input. Errors get rewritten so the
+    // surfaced `.origin` matches what the user actually typed, not the
+    // temp file the orchestrator chose internally (#107 contract).
+    let input: string;
+    let origin: string;
     if (spec.kind === "stdin") {
-      const bytes = await readAll(Deno.stdin.readable);
-      inputForHeyApi = join(tmp, "stdin-spec.yaml");
-      await Deno.writeFile(inputForHeyApi, bytes);
-      originOverride = "<stdin>";
-    } else if (spec.kind === "url") {
-      inputForHeyApi = spec.url;
+      const bytes = new Uint8Array(await new Response(Deno.stdin.readable).arrayBuffer());
+      input = join(tmp, "stdin-spec.yaml");
+      await Deno.writeFile(input, bytes);
+      origin = "<stdin>";
+    } else if (spec.kind === "remote") {
+      const res = await fetch(spec.url);
+      if (!res.ok) {
+        throw new Error(`fetch ${spec.url} failed: ${res.status} ${res.statusText}`);
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      input = join(tmp, "remote-spec.yaml");
+      await Deno.writeFile(input, bytes);
+      origin = spec.url;
     } else {
-      inputForHeyApi = spec.path;
+      input = spec.path;
+      origin = spec.path;
     }
 
-    // 1. Preflight (#107) — accepts paths and URLs. Rewrite the
-    // surfaced origin if we materialized stdin to a temp file.
+    // 1. Preflight (#107). Rewrite origin if it's a materialized input.
+    const rewriteOrigin = origin !== input;
     try {
-      await Preflight.check(spec.kind === "url" ? new URL(inputForHeyApi) : inputForHeyApi);
+      await Preflight.check(input);
     } catch (e) {
-      if (originOverride !== null) {
-        throw withOrigin(e as Error & { origin?: string }, inputForHeyApi, originOverride);
+      if (rewriteOrigin) {
+        throw withOrigin(e as Error & { origin?: string }, input, origin);
       }
       throw e;
     }
 
-    // 2. Ref-safety (#241) — only meaningful for local-on-disk specs
-    // with a meaningful enclosing directory. URL inputs pull over
-    // HTTPS; stdin specs are unmoored (no caller-relative root). The
-    // boundary check applies only to disk paths the caller named.
+    // 2. Ref-safety (#241) applies to disk-path inputs (where the
+    // caller's enclosing directory is a meaningful boundary). Remote
+    // URLs and stdin have no caller-relative root — `--allow-ref-root`
+    // would have to be set explicitly to permit any external $ref, but
+    // we don't run the boundary check itself.
     if (spec.kind === "path") {
-      await checkRefSafety(inputForHeyApi, { allowRefRoot: args.allowRefRoot });
+      await checkRefSafety(input, { allowRefRoot: args.allowRefRoot });
     }
 
-    // 3. Codegen (#130 etc.). The string-overload uses Deno.readTextFile
-    // which doesn't follow URLs, so for URL inputs we fetch the bytes
-    // ourselves and feed the parsed doc to the synchronous overload.
-    let result;
-    if (spec.kind === "url") {
-      const res = await fetch(inputForHeyApi);
-      if (!res.ok) {
-        throw new Error(`fetch ${inputForHeyApi} failed: ${res.status} ${res.statusText}`);
-      }
-      const text = await res.text();
-      const doc = Yaml.parse(text) as Record<string, unknown>;
-      result = emit(doc);
-    } else {
-      result = await emit(inputForHeyApi);
-    }
+    // 3. Codegen (#130 etc.) — input is always a local path now.
+    const result = await emit(input);
 
     // 4. hey-api: produce the typed SDK at <tmp>/generated/. Wrap any
     // throw as Compile.HeyApiFailure so callers get a uniform error
-    // surface (#107 §"Errors"). Hey-api accepts both filesystem paths
-    // and remote URLs as `input`.
+    // surface (#107 §"Errors"). Hey-api gets the local path; the
+    // surfaced origin is the user-visible identifier.
     try {
       await createClient({
-        input: inputForHeyApi,
+        input,
         output: { path: join(tmp, "generated") },
         plugins: ["@hey-api/client-fetch"],
       });
     } catch (cause) {
-      const visibleOrigin = originOverride ?? inputForHeyApi;
-      throw new Compile.HeyApiFailure(visibleOrigin, cause);
+      throw new Compile.HeyApiFailure(origin, cause);
     }
 
     // 5. Compose the entry — the `import "./generated/sdk.gen.ts"` is
@@ -409,7 +383,12 @@ export async function compile(args: CompileArgs): Promise<void> {
       throw new Error(`deno compile failed (exit ${out.code}):\n${stderr}`);
     }
   } finally {
-    await Deno.remove(tmp, { recursive: true });
+    // Best-effort cleanup. Catching here is intentional: a removal
+    // failure (permissions, race, already-deleted) must not mask the
+    // real error from the try-block above.
+    try {
+      await Deno.remove(tmp, { recursive: true });
+    } catch { /* ignore */ }
   }
 }
 
@@ -454,7 +433,9 @@ export async function main(argv: string[]): Promise<number> {
       err instanceof Compile.UnsupportedVersion
     ) return 3;
     if (err instanceof RefEscapesRoot) return 4;
-    if (err instanceof Compile.HeyApiFailure) return 5;
+    // HeyApiFailure + any other late-stage failure (codegen, bundle)
+    // shares exit code 5 — the user-visible distinction comes from the
+    // error name in stderr, not the exit code.
     return 5;
   }
 }
