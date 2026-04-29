@@ -25,6 +25,7 @@
  */
 
 import { isAbsolute, join, resolve } from "@std/path";
+import * as Yaml from "@std/yaml";
 import { createClient } from "@hey-api/openapi-ts";
 import { Compile, Preflight } from "./compile/preflight.ts";
 import { checkRefSafety, RefEscapesRoot } from "./compile/ref-safety.ts";
@@ -281,6 +282,22 @@ async function readAll(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> 
   return out;
 }
 
+/** Rewrite an error's `origin` (and `message` substring) from a temp
+ * path to `<stdin>` so the caller sees the spec identifier they
+ * actually passed (#107 contract: stream origins surface as `<stdin>`,
+ * not the temp file the orchestrator chose to materialize them to). */
+function withOrigin<E extends Error & { origin?: string }>(
+  err: E,
+  realOrigin: string,
+  visibleOrigin: string,
+): E {
+  if (err.origin === realOrigin) err.origin = visibleOrigin;
+  if (typeof err.message === "string" && err.message.includes(realOrigin)) {
+    err.message = err.message.split(realOrigin).join(visibleOrigin);
+  }
+  return err;
+}
+
 /** Compile a spec into a self-contained binary at `args.output`. */
 export async function compile(args: CompileArgs): Promise<void> {
   const spec = classifySpec(args.spec);
@@ -294,32 +311,59 @@ export async function compile(args: CompileArgs): Promise<void> {
     // Writing once to disk and passing the path is the simplest
     // tee/buffer that satisfies preflight + ref-safety + hey-api
     // (which all want a path or URL, not a live stream).
-    let specSource: string;
-    let isUrl = false;
+    //
+    // `inputForHeyApi` is what we hand to hey-api (path / URL).
+    // `originOverride` (when non-null) tells the error-rewriting helper
+    // what to substitute in the surfaced origin so the user sees the
+    // identifier they actually typed (path / URL / `<stdin>`) rather
+    // than the temp file we chose internally.
+    let inputForHeyApi: string;
+    let originOverride: string | null = null;
     if (spec.kind === "stdin") {
       const bytes = await readAll(Deno.stdin.readable);
-      specSource = join(tmp, "stdin-spec.yaml");
-      await Deno.writeFile(specSource, bytes);
+      inputForHeyApi = join(tmp, "stdin-spec.yaml");
+      await Deno.writeFile(inputForHeyApi, bytes);
+      originOverride = "<stdin>";
     } else if (spec.kind === "url") {
-      specSource = spec.url;
-      isUrl = true;
+      inputForHeyApi = spec.url;
     } else {
-      specSource = spec.path;
+      inputForHeyApi = spec.path;
     }
 
-    // 1. Preflight (#107) — accepts paths and URLs.
-    await Preflight.check(isUrl ? new URL(specSource) : specSource);
+    // 1. Preflight (#107) — accepts paths and URLs. Rewrite the
+    // surfaced origin if we materialized stdin to a temp file.
+    try {
+      await Preflight.check(spec.kind === "url" ? new URL(inputForHeyApi) : inputForHeyApi);
+    } catch (e) {
+      if (originOverride !== null) {
+        throw withOrigin(e as Error & { origin?: string }, inputForHeyApi, originOverride);
+      }
+      throw e;
+    }
 
     // 2. Ref-safety (#241) — only meaningful for local-on-disk specs
     // with a meaningful enclosing directory. URL inputs pull over
     // HTTPS; stdin specs are unmoored (no caller-relative root). The
     // boundary check applies only to disk paths the caller named.
     if (spec.kind === "path") {
-      await checkRefSafety(specSource, { allowRefRoot: args.allowRefRoot });
+      await checkRefSafety(inputForHeyApi, { allowRefRoot: args.allowRefRoot });
     }
 
-    // 3. Codegen (#130 etc.).
-    const result = await emit(specSource);
+    // 3. Codegen (#130 etc.). The string-overload uses Deno.readTextFile
+    // which doesn't follow URLs, so for URL inputs we fetch the bytes
+    // ourselves and feed the parsed doc to the synchronous overload.
+    let result;
+    if (spec.kind === "url") {
+      const res = await fetch(inputForHeyApi);
+      if (!res.ok) {
+        throw new Error(`fetch ${inputForHeyApi} failed: ${res.status} ${res.statusText}`);
+      }
+      const text = await res.text();
+      const doc = Yaml.parse(text) as Record<string, unknown>;
+      result = emit(doc);
+    } else {
+      result = await emit(inputForHeyApi);
+    }
 
     // 4. hey-api: produce the typed SDK at <tmp>/generated/. Wrap any
     // throw as Compile.HeyApiFailure so callers get a uniform error
@@ -327,12 +371,13 @@ export async function compile(args: CompileArgs): Promise<void> {
     // and remote URLs as `input`.
     try {
       await createClient({
-        input: specSource,
+        input: inputForHeyApi,
         output: { path: join(tmp, "generated") },
         plugins: ["@hey-api/client-fetch"],
       });
     } catch (cause) {
-      throw new Compile.HeyApiFailure(specSource, cause);
+      const visibleOrigin = originOverride ?? inputForHeyApi;
+      throw new Compile.HeyApiFailure(visibleOrigin, cause);
     }
 
     // 5. Compose the entry — the `import "./generated/sdk.gen.ts"` is
