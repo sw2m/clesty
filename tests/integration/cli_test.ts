@@ -184,3 +184,45 @@ Deno.test("cli (#764): parent-escape \\$ref surfaces RefEscapesRoot", async () =
     await cleanup(dir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Item F — stdin input via `-` as the spec argument: closes the
+// stream-handoff scope item from #766. The bytes piped on stdin are
+// materialized to a temp file inside `compile()` so preflight,
+// ref-safety (skipped for stdin), codegen, and hey-api all consume the
+// same content.
+// ---------------------------------------------------------------------------
+
+Deno.test("cli (#766): `clesty compile -` reads spec from stdin and produces a binary", async () => {
+  const dir = await tempDir();
+  try {
+    const bin = `${dir}/stdin-cli`;
+    const specBytes = await Deno.readFile(`${FIXTURE_DIR}petstore-mini.yaml`);
+
+    const cmd = new Deno.Command(Deno.execPath(), {
+      args: ["run", "-A", CLI_PATH, "compile", "-", "--output", bin],
+      stdin: "piped",
+      stdout: "piped",
+      stderr: "piped",
+    });
+    const child = cmd.spawn();
+    const writer = child.stdin.getWriter();
+    await writer.write(specBytes);
+    await writer.close();
+    const out = await child.output();
+    const stderr = new TextDecoder().decode(out.stderr);
+    assertEquals(out.code, 0, `compile from stdin must succeed; stderr:\n${stderr}`);
+
+    const stat = await Deno.stat(bin);
+    assert(stat.isFile, `expected ${bin} to be a file`);
+    const help = await runBin(bin, ["--help"]);
+    assertEquals(help.code, 0, `binary --help must exit 0; stderr:\n${help.stderr}`);
+    assertStringIncludes(
+      help.stdout + help.stderr,
+      "list-pets",
+      `expected 'list-pets' subcommand from stdin-piped spec`,
+    );
+  } finally {
+    await cleanup(dir);
+  }
+});

@@ -63,6 +63,23 @@ Deno.test("compile (#157): header parameter threads into hey-api `headers: { ...
   assertStringIncludes(block[1], "X-Tenant");
 });
 
+Deno.test("compile (#157): hyphenated header names use bracket-access (regression)", async () => {
+  // `X-Tenant` was previously emitted as `X-Tenant: opts.X-Tenant`
+  // which TypeScript parses as `opts.X - Tenant` — silent miscompile.
+  // Quoted-key + bracket-access is the only form that round-trips.
+  const src = await emitSource("required-header.yaml");
+  // Disallowed: bare-identifier on a hyphen-bearing name.
+  assert(
+    !/\bopts\.X-Tenant\b/.test(src),
+    `expected NO 'opts.X-Tenant' bare-access form; src:\n${src}`,
+  );
+  // Required: bracket-access form.
+  assert(
+    /\bopts\["X-Tenant"\]/.test(src),
+    `expected 'opts["X-Tenant"]' bracket-access form; src:\n${src}`,
+  );
+});
+
 Deno.test("compile (#157): operation with no header parameters has no `headers` block", async () => {
   const src = await emitSource("no-header.yaml");
   const block = src.match(/headers\s*:\s*\{([^}]*)\}/);
