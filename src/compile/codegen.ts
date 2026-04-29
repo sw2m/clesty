@@ -155,7 +155,14 @@ function sourceFor(
     }
     const all = [...g.required, ...g.optional];
     if (all.length > 0) {
-      blocks.push(`${g.block}: { ${all.map((p) => `${p.name}: opts.${p.name}`).join(", ")} }`);
+      // Use quoted-key + bracket-access so parameter names with hyphens
+      // (`X-Tenant`, `X-Trace-Id`) emit valid TS. Bare-identifier form
+      // would parse `opts.X-Tenant` as `opts.X - Tenant` — silent miscompile.
+      blocks.push(
+        `${g.block}: { ${
+          all.map((p) => `${JSON.stringify(p.name)}: opts[${JSON.stringify(p.name)}]`).join(", ")
+        } }`,
+      );
     }
   }
   // baseUrl threaded into the hey-api options object so the client call

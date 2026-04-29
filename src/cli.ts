@@ -306,6 +306,11 @@ export async function compile(args: CompileArgs): Promise<void> {
     } else if (spec.kind === "remote") {
       const res = await fetch(spec.url);
       if (!res.ok) {
+        // Cancel the unread body before throwing so the connection
+        // doesn't leak.
+        try {
+          await res.body?.cancel();
+        } catch { /* ignore */ }
         throw new Error(`fetch ${spec.url} failed: ${res.status} ${res.statusText}`);
       }
       const bytes = new Uint8Array(await res.arrayBuffer());
