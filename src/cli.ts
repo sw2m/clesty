@@ -36,7 +36,7 @@ Usage: clesty compile <spec> --output <bin> [options]
 Compile an OpenAPI 3 document into a self-contained CLI binary.
 
 Arguments:
-  <spec>                      Path, URL, or ` - ` (read from stdin) for
+  <spec>                      Path, URL, or '-' (read from stdin) for
                               the OpenAPI document.
 
 Required options:
