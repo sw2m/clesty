@@ -36,7 +36,8 @@ Usage: clesty compile <spec> --output <bin> [options]
 Compile an OpenAPI 3 document into a self-contained CLI binary.
 
 Arguments:
-  <spec>                      Path or URL to the OpenAPI document.
+  <spec>                      Path, URL, or ` - ` (read from stdin) for
+                              the OpenAPI document.
 
 Required options:
   --output <bin>              Path to write the compiled binary.
@@ -83,6 +84,10 @@ export function parseCompileArgs(argv: string[]): CompileArgs {
       }
     } else if (a === "-h" || a === "--help") {
       throw new UsageError("__HELP__");
+    } else if (a === "-" && spec === null) {
+      // Bare `-` is the conventional stdin sentinel; takes the
+      // positional spec slot.
+      spec = a;
     } else if (a.startsWith("-")) {
       throw new UsageError(`unknown option: ${a}`);
     } else if (spec === null) {
@@ -230,38 +235,92 @@ await main();
 `;
 }
 
-/** Resolve `args.spec` to the form each downstream step wants. URL inputs
- * pass through unchanged; filesystem paths get absolutized so the
- * downstream `Codegen.emit()` and hey-api both see a canonical path
- * regardless of the caller's CWD. Stream input (stdin) is deferred —
- * the CLI's positional arg today is path-or-URL only. */
-function resolveSpec(spec: string): { source: string; isUrl: boolean } {
+type SpecSource =
+  | { kind: "path"; path: string }
+  | { kind: "url"; url: string }
+  | { kind: "stdin" };
+
+/** Classify `args.spec`. URL inputs pass through unchanged; absolute /
+ * relative filesystem paths get absolutized; the literal `-` means
+ * "read from stdin". The stdin case is materialized to a temp file
+ * inside `compile()` so preflight, ref-safety, codegen, and hey-api
+ * each consume the same bytes — the tee/buffer/handoff design called
+ * out in #766 §Scope. */
+function classifySpec(spec: string): SpecSource {
+  if (spec === "-") return { kind: "stdin" };
   if (spec.startsWith("http://") || spec.startsWith("https://") || spec.startsWith("file:")) {
-    return { source: spec, isUrl: true };
+    return { kind: "url", url: spec };
   }
-  return { source: isAbsolute(spec) ? spec : resolve(spec), isUrl: false };
+  return { kind: "path", path: isAbsolute(spec) ? spec : resolve(spec) };
+}
+
+/** Drain the readable stream into a Uint8Array. Used to materialize a
+ * stdin spec to disk so all downstream consumers see the same bytes. */
+async function readAll(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = stream.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        total += value.byteLength;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, off);
+    off += chunk.byteLength;
+  }
+  return out;
 }
 
 /** Compile a spec into a self-contained binary at `args.output`. */
 export async function compile(args: CompileArgs): Promise<void> {
-  const { source: specSource, isUrl } = resolveSpec(args.spec);
+  const spec = classifySpec(args.spec);
 
-  // 1. Preflight (#107) — accepts paths and URLs.
-  await Preflight.check(isUrl ? new URL(specSource) : specSource);
-
-  // 2. Ref-safety (#241) — only meaningful for local files. Remote specs
-  // are pulled by hey-api over HTTPS; the boundary check doesn't apply.
-  if (!isUrl) {
-    await checkRefSafety(specSource, { allowRefRoot: args.allowRefRoot });
-  }
-
-  // 3. Codegen (#130 etc.).
-  const result = await emit(specSource);
-
-  // 4-6. hey-api typed client + entry composition + deno compile, all in
-  // a single tmp dir so the deno-compile import resolution is stable.
+  // The bundle tmp dir holds the hey-api SDK output, the composed
+  // entry.ts, and (for stdin specs) the materialized spec file.
   const tmp = await Deno.makeTempDir({ prefix: "clesty-bundle-" });
+
   try {
+    // Stream handoff: stdin → temp file → all downstream consumers.
+    // Writing once to disk and passing the path is the simplest
+    // tee/buffer that satisfies preflight + ref-safety + hey-api
+    // (which all want a path or URL, not a live stream).
+    let specSource: string;
+    let isUrl = false;
+    if (spec.kind === "stdin") {
+      const bytes = await readAll(Deno.stdin.readable);
+      specSource = join(tmp, "stdin-spec.yaml");
+      await Deno.writeFile(specSource, bytes);
+    } else if (spec.kind === "url") {
+      specSource = spec.url;
+      isUrl = true;
+    } else {
+      specSource = spec.path;
+    }
+
+    // 1. Preflight (#107) — accepts paths and URLs.
+    await Preflight.check(isUrl ? new URL(specSource) : specSource);
+
+    // 2. Ref-safety (#241) — only meaningful for local-on-disk specs
+    // with a meaningful enclosing directory. URL inputs pull over
+    // HTTPS; stdin specs are unmoored (no caller-relative root). The
+    // boundary check applies only to disk paths the caller named.
+    if (spec.kind === "path") {
+      await checkRefSafety(specSource, { allowRefRoot: args.allowRefRoot });
+    }
+
+    // 3. Codegen (#130 etc.).
+    const result = await emit(specSource);
+
     // 4. hey-api: produce the typed SDK at <tmp>/generated/. Wrap any
     // throw as Compile.HeyApiFailure so callers get a uniform error
     // surface (#107 §"Errors"). Hey-api accepts both filesystem paths
