@@ -253,24 +253,29 @@ Deno.test("budget: pre-flight reads at most MAX_PREFLIGHT_BYTES (16 KiB) from so
 //    not exist in components.schemas).
 // ---------------------------------------------------------------------------
 
-import { compile } from "../../src/cli.ts";
-import { Compile as PreflightCompile } from "../../src/compile/preflight.ts";
-
 Deno.test(
   "hey-api: a hey-api rejection is wrapped as Compile.HeyApiFailure with origin",
   async () => {
+    // Dynamic imports per VSDD §II Phase 2a Red Gate: this file is
+    // designed to typecheck-tolerate missing modules. The graceful-
+    // import pattern at the top of this file already handles
+    // `src/compile/preflight.ts`; the cli orchestrator is loaded
+    // here the same way so the file remains tolerant if `src/cli.ts`
+    // is absent.
+    const cli = await import("../../src/cli.ts");
+    const preflight = await import("../../src/compile/preflight.ts");
     const dir = await Deno.makeTempDir({ prefix: "clesty-heyapi-" });
     try {
       const fixture = fixturePath("v300-broken-ref.yaml");
       let thrown: unknown;
       try {
-        await compile({ spec: fixture, output: `${dir}/bin` });
+        await cli.compile({ spec: fixture, output: `${dir}/bin` });
       } catch (e) {
         thrown = e;
       }
       assert(thrown !== undefined, "expected a HeyApiFailure throw");
       assert(
-        thrown instanceof PreflightCompile.HeyApiFailure,
+        thrown instanceof preflight.Compile.HeyApiFailure,
         `expected Compile.HeyApiFailure, got ${
           (thrown as { constructor?: { name?: string } })?.constructor?.name
         }: ${(thrown as Error)?.message}`,

@@ -333,13 +333,28 @@ export async function compile(args: CompileArgs): Promise<void> {
       throw e;
     }
 
-    // 2. Ref-safety (#241) applies to disk-path inputs (where the
-    // caller's enclosing directory is a meaningful boundary). Remote
-    // URLs and stdin have no caller-relative root — `--allow-ref-root`
-    // would have to be set explicitly to permit any external $ref, but
-    // we don't run the boundary check itself.
-    if (spec.kind === "path") {
-      await checkRefSafety(input, { allowRefRoot: args.allowRefRoot });
+    // 2. Ref-safety (#241) runs for ALL source kinds:
+    //   - path: allowed root = caller's --allow-ref-root or the spec's
+    //           own enclosing directory (the existing default).
+    //   - stdin/remote: allowed root = caller's --allow-ref-root if
+    //           given, otherwise the bundle tmp dir (which contains
+    //           only the materialized spec). With root=tmp, hash-only
+    //           refs (`#/...`) still resolve, but any external ref
+    //           (absolute path, `file://`, parent escape) is refused.
+    //           This closes the "malicious doc with $ref:/etc/passwd
+    //           on stdin/remote" hole.
+    const allowRefRoot = args.allowRefRoot ??
+      (spec.kind === "path" ? undefined : tmp);
+    try {
+      await checkRefSafety(input, { allowRefRoot });
+    } catch (e) {
+      if (rewriteOrigin && e instanceof RefEscapesRoot) {
+        // The error message embeds the temp file's containing dir.
+        // Rewrite to the user-visible identifier so the surfaced text
+        // matches what the caller typed.
+        e.message = e.message.split(input).join(origin);
+      }
+      throw e;
     }
 
     // 3. Codegen (#130 etc.) — input is always a local path now.
